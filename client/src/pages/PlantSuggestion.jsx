@@ -51,17 +51,6 @@ const PlantSuggestion = () => {
         { value: 'medium', label: 'Moderate Care', description: 'Regular care, weekly attention', icon: <FaClock className="w-6 h-6" /> },
         { value: 'high', label: 'High Maintenance', description: 'Daily attention, intensive care', icon: <FaClock className="w-6 h-6" /> }
       ]
-    },
-    {
-      id: 'purpose',
-      title: 'What\'s your main goal?',
-      subtitle: 'What do you want to achieve with your plants?',
-      options: [
-        { value: 'food', label: 'Fresh Food', description: 'Grow vegetables, herbs, and fruits for cooking', icon: <FaLeaf className="w-6 h-6" /> },
-        { value: 'beauty', label: 'Beauty & Decor', description: 'Decorative plants for aesthetic appeal', icon: <FaLeaf className="w-6 h-6" /> },
-        { value: 'health', label: 'Health & Wellness', description: 'Air-purifying and medicinal plants', icon: <FaLeaf className="w-6 h-6" /> },
-        { value: 'hobby', label: 'Gardening Hobby', description: 'Enjoy the process of growing and nurturing', icon: <FaLeaf className="w-6 h-6" /> }
-      ]
     }
   ];
 
@@ -93,38 +82,33 @@ const PlantSuggestion = () => {
       const params = new URLSearchParams({
         sunlight: answers.sunlight || '',
         experience: answers.experience || '',
-        goal: answers.purpose || '',
         space: answers.space || '',
         time: answers.time || ''
       });
 
-      const response = await apiCall(`/plants?${params.toString()}`, { method: 'GET' });
+      const response = await apiCall(`/plants/quiz?${params.toString()}`, { method: 'GET' });
 
-      if (response.success && response.data) {
+      if (response.success && response.plants && response.plants.length > 0) {
         setResults({
-          plants: response.data.plants,
+          plants: response.plants,
           recommendations: 'Here are plants tailored to your answers',
           combinationKey: 'dynamic'
         });
       } else {
-        throw new Error(response.message || 'Failed to get plant suggestions');
+        // No plants found in database
+        setResults({
+          plants: [],
+          recommendations: 'No plants found matching your criteria. Please add some plants to the database first.',
+          combinationKey: 'empty'
+        });
       }
     } catch (error) {
       console.error('Error fetching plant suggestions:', error);
-      // Fallback plants
-      const fallbackPlants = [
-        { name: 'Cherry Tomato', category: 'Fruits', description: 'Small, sweet tomatoes perfect for containers.', image: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=300&h=200&fit=crop&q=80', growingTime: '60-75 days', sunlight: 'Full Sun', space: 'Small', difficulty: 'Easy', price: '₹30-50' },
-        { name: 'Strawberry', category: 'Fruits', description: 'Sweet, juicy berries perfect for desserts.', image: 'https://images.unsplash.com/photo-1464965911861-746a04b4bca6?w=300&h=200&fit=crop&q=80', growingTime: '60-80 days', sunlight: 'Full Sun', space: 'Small', difficulty: 'Easy', price: '₹25-40' },
-        { name: 'Sweet Basil', category: 'Herbs', description: 'Aromatic herb perfect for cooking.', image: 'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?w=300&h=200&fit=crop&q=80', growingTime: '30-45 days', sunlight: 'Full Sun', space: 'Small', difficulty: 'Easy', price: '₹20-30' },
-        { name: 'Fresh Mint', category: 'Herbs', description: 'Fast-growing herb perfect for teas.', image: 'https://images.unsplash.com/photo-1594736797933-d0401ba2fe65?w=300&h=200&fit=crop&q=80', growingTime: '20-30 days', sunlight: 'Full Sun', space: 'Small', difficulty: 'Easy', price: '₹15-25' },
-        { name: 'Bell Pepper', category: 'Vegetables', description: 'Colorful peppers that add flavor.', image: 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=300&h=200&fit=crop&q=80', growingTime: '70-90 days', sunlight: 'Full Sun', space: 'Small', difficulty: 'Easy', price: '₹25-40' },
-        { name: 'Lettuce', category: 'Vegetables', description: 'Crisp, fresh greens perfect for salads.', image: 'https://images.unsplash.com/photo-1622206151226-18ca2c9ab4a1?w=300&h=200&fit=crop&q=80', growingTime: '30-45 days', sunlight: 'Full Sun', space: 'Small', difficulty: 'Easy', price: '₹15-25' }
-      ];
-      
+      // Show error message instead of fallback plants
       setResults({
-        plants: fallbackPlants,
-        recommendations: 'Here are some great beginner-friendly plants to get you started!',
-        combinationKey: 'fallback'
+        plants: [],
+        recommendations: 'Unable to fetch plant suggestions. Please check your connection and try again.',
+        combinationKey: 'error'
       });
     } finally {
       setIsLoading(false);
@@ -182,51 +166,76 @@ const PlantSuggestion = () => {
             <p className="text-gray-600">{results.recommendations}</p>
           </div>
 
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            {results.plants.map((plant, index) => (
-              <motion.div key={plant.name} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + index * 0.1 }} className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow">
-                <div className="relative h-48">
-                  <img src={plant.image} alt={plant.name} className="w-full h-full object-cover" />
-                  <div className="absolute top-3 right-3">
-                    <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-medium">{plant.category}</span>
+          {results.plants.length > 0 ? (
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+              {results.plants.map((plant, index) => (
+                <motion.div key={plant.name} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + index * 0.1 }} className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow">
+                  <div className="relative h-48">
+                    <img src={plant.image} alt={plant.name} className="w-full h-full object-cover" />
+                    <div className="absolute top-3 right-3">
+                      <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-medium">{plant.category}</span>
+                    </div>
                   </div>
+                  <div className="p-6">
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">{plant.name}</h3>
+                    <p className="text-gray-600 mb-4">{plant.description}</p>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Growing Time:</span>
+                        <span className="font-medium">{plant.growingTime}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Sunlight:</span>
+                        <span className="font-medium">{plant.sunlight}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Difficulty:</span>
+                        <span className="font-medium">{plant.difficulty}</span>
+                      </div>
+                    </div>
+                    <button onClick={() => handleAddToGarden(plant)} className="w-full mt-4 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors">
+                      Add to My Garden
+                    </button>
+                  </div>
+                </motion.div>
+              ))}
+            </motion.div>
+          ) : (
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="text-center py-12">
+              <div className="bg-white rounded-xl shadow-lg p-8 max-w-md mx-auto">
+                <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <FaLeaf className="w-8 h-8 text-yellow-600" />
                 </div>
-                <div className="p-6">
-                  <h3 className="text-xl font-semibold text-gray-900 mb-2">{plant.name}</h3>
-                  <p className="text-gray-600 mb-4">{plant.description}</p>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Growing Time:</span>
-                      <span className="font-medium">{plant.growingTime}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Sunlight:</span>
-                      <span className="font-medium">{plant.sunlight}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Difficulty:</span>
-                      <span className="font-medium">{plant.difficulty}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Price:</span>
-                      <span className="font-medium text-green-600">{plant.price}</span>
-                    </div>
-                  </div>
-                  <button onClick={() => handleAddToGarden(plant)} className="w-full mt-4 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors">
-                    Add to My Garden
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">No Plants Found</h3>
+                <p className="text-gray-600 mb-6">
+                  {results.combinationKey === 'empty' 
+                    ? "There are no plants in the database that match your criteria. Please add some plants first."
+                    : "Unable to fetch plant suggestions. Please check your connection and try again."
+                  }
+                </p>
+                <div className="space-y-3">
+                  <button onClick={resetQuiz} className="w-full bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors">
+                    Take Quiz Again
                   </button>
+                  {results.combinationKey === 'empty' && (
+                    <p className="text-sm text-gray-500">
+                      💡 Tip: Use Postman to add plants to your database first!
+                    </p>
+                  )}
                 </div>
-              </motion.div>
-            ))}
-          </motion.div>
+              </div>
+            </motion.div>
+          )}
 
           <div className="text-center">
             <button onClick={resetQuiz} className="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-colors mr-4">
               Take Quiz Again
             </button>
-            <button onClick={() => window.location.href = '/my-garden-journal'} className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors">
-              View My Garden Journal
-            </button>
+            {results.plants.length > 0 && (
+              <button onClick={() => window.location.href = '/my-garden-journal'} className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors">
+                View My Garden Journal
+              </button>
+            )}
           </div>
         </div>
       </div>

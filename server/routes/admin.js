@@ -13,9 +13,6 @@ const {
   flagUser,
   bulkUserOperations,
   getUserDetails,
-  createPlant,
-  updatePlant,
-  deletePlant,
   getAllOrders,
   updateOrderStatus,
   sendOrderEmail,
@@ -43,9 +40,6 @@ const {
   getInventoryInsights,
   recalculateAnalytics,
   getNotifications,
-  // Admin Plants
-  getAdminPlants,
-  uploadPlantsBulk,
   getProductReviews,
   handleReviewAction,
   bulkEditProducts,
@@ -137,12 +131,6 @@ router.put('/users/:id/flag', validateObjectId, trackAdminActivity('user_updated
 router.delete('/users/:id', validateObjectId, trackAdminActivity('user_deleted', (req) => `Deleted user ${req.params.id}`), deleteUser);
 router.post('/users/bulk', trackAdminActivity('user_updated', 'Performed bulk user operations'), bulkUserOperations);
 
-// Plant management
-router.get('/plants', getAdminPlants);
-router.post('/plants', createPlant);
-router.put('/plants/:id', validateObjectId, updatePlant);
-router.delete('/plants/:id', validateObjectId, deletePlant);
-router.post('/plants/upload', upload.single('file'), uploadPlantsBulk);
 
 // Order management
 router.get('/orders', validatePagination, getAllOrders);

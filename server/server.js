@@ -28,8 +28,10 @@ const defaultAllowedOrigins = [
 const allowedOrigins = (process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : defaultAllowedOrigins);
 
 app.use(cors({
-  origin: true, // Allow all origins for development
-  credentials: true
+  origin: allowedOrigins,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
 app.use(express.json({ limit: '10mb' }));
@@ -56,20 +58,24 @@ const authRoutes = require('./routes/auth');
 const blogRoutes = require('./routes/blog');
 const storeRoutes = require('./routes/store');
 const adminRoutes = require('./routes/admin');
+const adminAuthRoutes = require('./routes/adminAuth');
 const chatbotRoutes = require('./routes/chatbot');
 const notificationRoutes = require('./routes/notifications');
 const plantRoutes = require('./routes/plants');
 const gardenRoutes = require('./routes/garden');
+const statsRoutes = require('./routes/stats');
 
 // Use routes
 app.use('/api/auth', authRoutes);
 app.use('/api/blog', blogRoutes);
 app.use('/api/store', storeRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/admin/auth', adminAuthRoutes);
 app.use('/api/chatbot', chatbotRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/plants', plantRoutes);
 app.use('/api/garden', gardenRoutes);
+app.use('/api/stats', statsRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

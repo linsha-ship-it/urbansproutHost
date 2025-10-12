@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const Admin = require('../models/Admin');
 const Blog = require('../models/Blog');
 const { generateToken } = require('../middlewares/auth');
 const { AppError } = require('../middlewares/errorHandler');
@@ -101,7 +102,58 @@ const register = asyncHandler(async (req, res, next) => {
 const login = asyncHandler(async (req, res, next) => {
   const { email, password } = req.body;
 
-  // Find user and include password for comparison
+  // First check Admin collection
+  let admin = await Admin.findOne({ email: email.toLowerCase() }).select('+password');
+  
+  if (admin) {
+    // Check if admin account is locked
+    if (admin.isLocked) {
+      return next(new AppError('Account is temporarily locked due to too many failed login attempts', 401));
+    }
+
+    // Check password
+    const isPasswordValid = await admin.comparePassword(password);
+    if (!isPasswordValid) {
+      // Increment login attempts
+      await admin.incLoginAttempts();
+      return next(new AppError('Invalid email or password', 401));
+    }
+
+    // Reset login attempts on successful login
+    if (admin.loginAttempts > 0) {
+      await admin.resetLoginAttempts();
+    }
+
+    // Update last login and activity
+    admin.lastLogin = new Date();
+    admin.activity.lastActivity = new Date();
+    admin.activity.totalLogins += 1;
+    await admin.save();
+
+    // Generate token
+    const token = generateToken(admin._id, 'admin');
+
+    return res.json({
+      success: true,
+      message: 'Admin login successful',
+      data: {
+        user: {
+          id: admin._id,
+          name: admin.name,
+          email: admin.email,
+          role: 'admin',
+          permissions: admin.permissions,
+          status: admin.status,
+          avatar: admin.profile.avatar,
+          lastLogin: admin.lastLogin,
+          isAdmin: true
+        },
+        token
+      }
+    });
+  }
+
+  // If not admin, check User collection
   const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
   
   if (!user) {
@@ -299,6 +351,10 @@ const googleSignIn = asyncHandler(async (req, res, next) => {
     return next(new AppError('Google authentication data is incomplete', 400));
   }
 
+  // Enforce admin role for specific emails
+  const adminEmails = ['admin@urbansprout.com', 'lxiao0391@gmail.com'];
+  const isAdminEmail = adminEmails.includes(email.toLowerCase());
+
   // Check if user already exists with this email
   let user = await User.findOne({ email: email.toLowerCase() });
 
@@ -310,15 +366,19 @@ const googleSignIn = asyncHandler(async (req, res, next) => {
       if (photoURL && !user.avatar) {
         user.avatar = photoURL;
       }
-      await user.save();
     }
+    // Upgrade to admin if email is in admin list
+    if (isAdminEmail && user.role !== 'admin') {
+      user.role = 'admin';
+    }
+    await user.save();
   } else {
-    // Create new user
+    // Create new user with proper role
     user = await User.create({
       name: name || 'Google User',
       email: email.toLowerCase(),
       googleId: uid,
-      role,
+      role: isAdminEmail ? 'admin' : role,
       avatar: photoURL,
       emailVerified: emailVerified || false,
       password: 'google_auth_' + uid // Placeholder password for Google users

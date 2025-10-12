@@ -1,18 +1,39 @@
 const express = require('express');
 const router = express.Router();
-const { suggestPlants, getPlantSuggestionsByCombination, getAllPlants, getPlantById } = require('../controllers/plantController');
+const { 
+  createPlant, 
+  getPlantSuggestionsByQuiz, 
+  updatePlant, 
+  deletePlant, 
+  getAllPlants, 
+  getPlantById, 
+  getPlantsByCategory, 
+  searchPlants 
+} = require('../controllers/plantController');
 
-// POST /api/plants/suggest - Get plant suggestions based on keyword and preferences
-router.post('/suggest', suggestPlants);
+// POST /api/plants - Create a new plant
+router.post('/', createPlant);
 
-// POST /api/plants/suggestions - Get plant suggestions based on user combination
-router.post('/suggestions', getPlantSuggestionsByCombination);
+// GET /api/plants/quiz - Get plant suggestions based on quiz answers
+router.get('/quiz', getPlantSuggestionsByQuiz);
 
-// GET /api/plants - Get plants with filters (quiz answers)
+// GET /api/plants/search - Search plants
+router.get('/search', searchPlants);
+
+// GET /api/plants/category/:category - Get plants by category
+router.get('/category/:category', getPlantsByCategory);
+
+// GET /api/plants - Get all plants with filters
 router.get('/', getAllPlants);
 
-// GET /api/plants/:id - Get specific plant by name
+// GET /api/plants/:id - Get specific plant by ID
 router.get('/:id', getPlantById);
+
+// PUT /api/plants/:id - Update a plant
+router.put('/:id', updatePlant);
+
+// DELETE /api/plants/:id - Delete a plant (soft delete)
+router.delete('/:id', deletePlant);
 
 module.exports = router;
 

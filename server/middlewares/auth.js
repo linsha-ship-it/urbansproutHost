@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Admin = require('../models/Admin');
 
 // Protect routes - require authentication
 const protect = async (req, res, next) => {
@@ -23,19 +24,45 @@ const protect = async (req, res, next) => {
       // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       
-      // Get user from token
-      const user = await User.findById(decoded.id);
-      
-      if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: 'Token is valid but user no longer exists'
-        });
-      }
+      // Check if this is an admin token
+      if (decoded.type === 'admin') {
+        const admin = await Admin.findById(decoded.id);
+        
+        if (!admin) {
+          return res.status(401).json({
+            success: false,
+            message: 'Token is valid but admin no longer exists'
+          });
+        }
 
-      // Add user to request object
-      req.user = user;
-      next();
+        // Check if admin is active
+        if (admin.status !== 'active') {
+          return res.status(401).json({
+            success: false,
+            message: 'Admin account is inactive'
+          });
+        }
+
+        // Add admin to request object
+        req.user = admin;
+        req.isAdmin = true;
+        next();
+      } else {
+        // Regular user token
+        const user = await User.findById(decoded.id);
+        
+        if (!user) {
+          return res.status(401).json({
+            success: false,
+            message: 'Token is valid but user no longer exists'
+          });
+        }
+
+        // Add user to request object
+        req.user = user;
+        req.isAdmin = false;
+        next();
+      }
     } catch (error) {
       return res.status(401).json({
         success: false,
@@ -53,7 +80,7 @@ const protect = async (req, res, next) => {
 
 // Admin only access
 const admin = (req, res, next) => {
-  if (req.user && req.user.role === 'admin') {
+  if (req.isAdmin || (req.user && req.user.role === 'admin')) {
     next();
   } else {
     return res.status(403).json({
@@ -93,8 +120,8 @@ const optionalAuth = async (req, res, next) => {
 };
 
 // Generate JWT token
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
+const generateToken = (id, type = 'user') => {
+  return jwt.sign({ id, type }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d'
   });
 };

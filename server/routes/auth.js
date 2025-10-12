@@ -145,26 +145,30 @@ router.post('/firebase-auth', async (req, res) => {
     // Find or create user
     let user = await require('../models/User').findOne({ email: userEmail.toLowerCase() });
     
+    // Define admin emails (could be moved to env in the future)
+    const adminEmails = ['admin@urbansprout.com', 'lxiao0391@gmail.com'];
+    const isAdminEmail = adminEmails.includes(userEmail.toLowerCase());
+
     if (!user) {
-      // For new users, check if this is an admin email
-      const adminEmails = ['admin@urbansprout.com', 'lxiao0391@gmail.com'];
-      const isAdminEmail = adminEmails.includes(userEmail.toLowerCase());
       const defaultRole = isAdminEmail ? 'admin' : 'beginner';
-      
       user = new (require('../models/User'))({
         name: name || decoded?.name || 'User',
         email: userEmail.toLowerCase(),
         firebaseUid: uid,
-        role: role || defaultRole,
+        role: defaultRole,
         password: 'firebase-auth' // placeholder
       });
       await user.save();
     } else {
-      // Update Firebase UID if not set, but preserve existing role
+      // Update Firebase UID if not set
       if (!user.firebaseUid) {
         user.firebaseUid = uid;
-        await user.save();
       }
+      // Enforce admin role if email is an admin email
+      if (isAdminEmail && user.role !== 'admin') {
+        user.role = 'admin';
+      }
+      await user.save();
     }
 
     // Generate JWT token

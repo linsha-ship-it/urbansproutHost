@@ -383,13 +383,15 @@ const Admin = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => deleteUser(user._id)}
-                        className="text-red-600 hover:text-red-500"
-                        disabled={user._id === user._id} // Prevent self-deletion
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {user.role !== 'admin' && (
+                        <button
+                          onClick={() => deleteUser(user._id)}
+                          className="text-red-600 hover:text-red-500"
+                          disabled={user._id === user._id} // Prevent self-deletion
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

@@ -248,14 +248,14 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         {/* Header */}
         <div className="text-center">
-          <div className="flex justify-center items-center mb-4">
+          <Link to="/" className="flex justify-center items-center mb-4 hover:opacity-80 transition-opacity cursor-pointer">
             <FaLeaf className="text-4xl text-green-600 mr-2" />
             <h1 className="text-3xl font-bold text-gray-900">UrbanSprout</h1>
-          </div>
+          </Link>
           <h2 className="text-2xl font-semibold text-gray-700">Welcome Back</h2>
           <p className="mt-2 text-gray-600">Sign in to your account</p>
         </div>
@@ -373,7 +373,7 @@ const Login = () => {
               <div className="w-full border-t border-gray-300" />
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-gradient-to-br from-green-50 to-blue-50 text-gray-500">
+              <span className="px-2 bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 text-gray-500">
                 Or continue with
               </span>
             </div>

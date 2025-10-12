@@ -23,7 +23,24 @@ const PostCard = ({
   handleBookmarkPost, 
   handleDeletePost, 
   setEditingPost 
-}) => (
+}) => {
+  const [isExpanded, setIsExpanded] = React.useState(false)
+  const [showReadMore, setShowReadMore] = React.useState(false)
+  const contentRef = React.useRef(null)
+
+  React.useEffect(() => {
+    if (contentRef.current) {
+      const lineHeight = parseInt(window.getComputedStyle(contentRef.current).lineHeight)
+      const maxHeight = lineHeight * 3 // Show 3 lines
+      setShowReadMore(contentRef.current.scrollHeight > maxHeight)
+    }
+  }, [post.content])
+
+  const toggleExpanded = () => {
+    setIsExpanded(!isExpanded)
+  }
+
+  return (
   <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-4 hover:shadow-md transition-shadow group">
     {/* Post Header */}
     <div className="flex items-center justify-between mb-4">
@@ -76,7 +93,29 @@ const PostCard = ({
 
     {/* Post Content */}
     <h3 className="text-lg font-bold text-gray-900 mb-2">{post.title}</h3>
-    <p className="text-sm text-gray-700 mb-3 leading-relaxed line-clamp-3">{post.content}</p>
+    <div className="mb-3">
+      <p 
+        ref={contentRef}
+        className={`text-sm text-gray-700 leading-relaxed ${
+          !isExpanded && showReadMore ? 'overflow-hidden' : ''
+        }`}
+        style={{
+          display: !isExpanded && showReadMore ? '-webkit-box' : 'block',
+          WebkitLineClamp: !isExpanded && showReadMore ? 3 : 'unset',
+          WebkitBoxOrient: 'vertical'
+        }}
+      >
+        {post.content}
+      </p>
+      {showReadMore && (
+        <button
+          onClick={toggleExpanded}
+          className="text-green-600 hover:text-green-700 text-sm font-medium mt-1 transition-colors"
+        >
+          {isExpanded ? 'Read less' : 'Read more'}
+        </button>
+      )}
+    </div>
 
     {/* Post Image */}
     {post.image && (
@@ -118,8 +157,17 @@ const PostCard = ({
         
         <button 
           type="button"
-          onClick={() => toggleComments(post.id)}
-          className="flex items-center space-x-2 text-gray-500 hover:text-blue-500 transition-colors"
+          onClick={() => {
+            if (!user) {
+              alert('Please log in to view comments.')
+              window.location.href = '/login'
+              return
+            }
+            toggleComments(post.id)
+          }}
+          className={`flex items-center space-x-2 transition-colors ${
+            !user ? 'opacity-50 cursor-not-allowed' : 'text-gray-500 hover:text-blue-500'
+          }`}
         >
           <FaComment />
           <span className="text-sm font-medium">{post.comments}</span>
@@ -128,7 +176,10 @@ const PostCard = ({
         <button 
           type="button"
           onClick={() => handleSharePost(post)}
-          className="flex items-center space-x-2 text-gray-500 hover:text-green-500 transition-colors"
+          disabled={!user}
+          className={`flex items-center space-x-2 transition-colors ${
+            !user ? 'opacity-50 cursor-not-allowed' : 'text-gray-500 hover:text-green-500'
+          }`}
         >
           <FaShare />
           <span className="text-sm font-medium">{post.shares}</span>
@@ -205,7 +256,8 @@ const PostCard = ({
       </div>
     )}
   </div>
-)
+  )
+}
 
 const Blog = () => {
   const { user } = useAuth()
@@ -325,7 +377,7 @@ const Blog = () => {
           timeAgo: formatTimeAgo(post.createdAt),
           tag: post.category === 'success_story' ? 'Success Story' : post.category === 'question' ? 'Question' : '',
           title: post.title || 'Untitled Post',
-          content: post.content?.substring(0, 200) + '...' || 'No content available',
+          content: post.content || 'No content available',
           image: post.image,
           hashtags: post.tags?.map(tag => `#${tag}`) || ['#PlantCare'],
           likes: post.likeCount || 0,
@@ -349,6 +401,12 @@ const Blog = () => {
 
   // Share post functionality
   const handleSharePost = async (post) => {
+    if (!user) {
+      alert('Please log in to share posts.')
+      window.location.href = '/login'
+      return
+    }
+    
     const shareUrl = `${window.location.origin}/blog/${post.id}`
     const shareText = `Check out this post: "${post.title}"`
     
@@ -424,7 +482,7 @@ const Blog = () => {
           timeAgo: formatTimeAgo(post.createdAt),
           tag: post.category === 'success_story' ? 'Success Story' : post.category === 'question' ? 'Question' : '',
           title: post.title || 'Untitled Post',
-          content: post.content?.substring(0, 200) + '...' || 'No content available',
+          content: post.content || 'No content available',
           image: post.image,
           hashtags: post.tags?.map(tag => `#${tag}`) || ['#PlantCare'],
           likes: post.likeCount || (post.likes?.length || 0),
@@ -583,6 +641,12 @@ const Blog = () => {
   }
 
   const handleLikePost = async (postId) => {
+    if (!user) {
+      alert('Please log in to like posts.')
+      window.location.href = '/login'
+      return
+    }
+    
     try {
       const response = await apiCall(`/blog/${postId}/like`, { 
         method: 'POST'
@@ -604,6 +668,12 @@ const Blog = () => {
   }
 
   const handleBookmarkPost = async (postId) => {
+    if (!user) {
+      alert('Please log in to bookmark posts.')
+      window.location.href = '/login'
+      return
+    }
+    
     try {
       const response = await apiCall(`/blog/${postId}/bookmark`, { 
         method: 'POST'
@@ -660,6 +730,7 @@ const Blog = () => {
     
     if (!user) {
       alert('Please log in to add a comment.')
+      window.location.href = '/login'
       return
     }
     
@@ -757,7 +828,7 @@ const Blog = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50">
       
       {/* Signup Banner for non-authenticated users */}
       {!user && (
@@ -782,7 +853,7 @@ const Blog = () => {
       )}
       
       {/* Search Bar */}
-      <div className="bg-white border-b border-gray-200 py-4">
+      <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-yellow-50 border-b border-gray-200 py-4">
         <div className="w-full px-6 sm:px-8 lg:px-12 xl:px-16">
           <div className="relative max-w-2xl mx-auto">
             <FaSearch className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
@@ -1200,7 +1271,7 @@ const Blog = () => {
                   timeAgo: formatTimeAgo(post.createdAt),
                   tag: post.category === 'success_story' ? 'Success Story' : post.category === 'question' ? 'Question' : '',
                   title: post.title || 'Untitled Post',
-                  content: post.content?.substring(0, 200) + '...' || 'No content available',
+                  content: post.content || 'No content available',
                   image: post.image,
                   hashtags: post.tags?.map(tag => `#${tag}`) || ['#PlantCare'],
                   likes: post.likeCount || (post.likes?.length || 0),
@@ -1230,8 +1301,6 @@ const Blog = () => {
             }
             
             setShowCreatePost(false)
-            // Show success message
-            alert('🎉 Post published successfully! Your post is now visible at the top of the blog.')
           }}
         />
       )}
@@ -1319,6 +1388,9 @@ const CreatePostModal = ({ onClose, user, onCreatePost }) => {
       console.log('API response:', response)
 
       if (response.success) {
+        // Show server's success message
+        alert(response.message || '🎉 Post submitted successfully! Your post will be added to the community after approval.')
+        
         // Small delay to ensure database is updated
         setTimeout(() => {
           onCreatePost()

@@ -1,105 +1,182 @@
-const PlantSuggestion = require('../models/PlantSuggestion');
 const Plant = require('../models/Plant');
 const fs = require('fs');
 const path = require('path');
 const csv = require('csv-parser');
 
-// Load plant data from CSV
-let plantData = [];
-
-const loadPlantData = () => {
-  return new Promise((resolve, reject) => {
-    const results = [];
-    fs.createReadStream(path.join(__dirname, '../data/plants.csv'))
-      .pipe(csv())
-      .on('data', (data) => results.push(data))
-      .on('end', () => {
-        plantData = results;
-        resolve(results);
-      })
-      .on('error', reject);
-  });
-};
-
-// Initialize plant data on startup
-loadPlantData().catch(console.error);
-
-// New function for getting plant suggestions based on user combinations
-const getPlantSuggestionsByCombination = async (req, res) => {
+// Create a new plant
+const createPlant = async (req, res) => {
   try {
-    const { space, sunlight, experience, time, purpose } = req.body;
-
-    // Validate required fields
-    if (!space || !sunlight || !experience || !time || !purpose) {
-      return res.status(400).json({
-        success: false,
-        message: 'All combination parameters are required: space, sunlight, experience, time, purpose'
-      });
-    }
-
-    // Create combination key
-    const combinationKey = `${space}_${sunlight}_${experience}_${time}_${purpose}`;
-
-    // Find plant suggestions for this combination
-    const plantSuggestion = await PlantSuggestion.findOne({ 
-      combinationKey,
-      isActive: true 
-    });
-
-    if (!plantSuggestion) {
-      // If no specific combination found, try to find a similar one or return default
-      const fallbackSuggestion = await PlantSuggestion.findOne({
-        space,
-        sunlight,
-        experience,
-        isActive: true
-      });
-
-      if (!fallbackSuggestion) {
-        // Return a default combination
-        const defaultSuggestion = await PlantSuggestion.findOne({
-          space: 'small',
-          sunlight: 'full_sun',
-          experience: 'beginner',
-          time: 'low',
-          purpose: 'food',
-          isActive: true
-        });
-
-        if (!defaultSuggestion) {
-          return res.status(404).json({
+    const plantData = req.body;
+    
+    // Handle both single plant and array of plants
+    if (Array.isArray(plantData)) {
+      // Bulk create plants
+      const plants = [];
+      for (const singlePlant of plantData) {
+        // Validate only essential required fields
+        const requiredFields = ['plantName', 'imageUrl', 'description', 'benefits', 'sunlight', 'space', 'experience', 'maintenance', 'category', 'difficulty', 'growingTime'];
+        const missingFields = requiredFields.filter(field => !singlePlant[field]);
+        
+        if (missingFields.length > 0) {
+          return res.status(400).json({
             success: false,
-            message: 'No plant suggestions found for this combination'
+            message: `Missing required fields in plant "${singlePlant.plantName || 'Unknown'}": ${missingFields.join(', ')}`
           });
         }
 
-        return res.json({
-          success: true,
-          plants: defaultSuggestion.plants,
-          recommendationMessage: defaultSuggestion.recommendationMessage,
-          combinationKey: defaultSuggestion.combinationKey,
-          isDefault: true
-        });
+        // Set default values for optional fields
+        const plantWithDefaults = {
+          ...singlePlant,
+          daysToGrow: singlePlant.daysToGrow || 60,
+          price: singlePlant.price || '₹20-40',
+          isActive: true,
+          archived: false
+        };
+
+        plants.push(plantWithDefaults);
       }
 
-      return res.json({
+      // Insert all plants
+      const createdPlants = await Plant.insertMany(plants);
+      
+      res.status(201).json({
         success: true,
-        plants: fallbackSuggestion.plants,
-        recommendationMessage: fallbackSuggestion.recommendationMessage,
-        combinationKey: fallbackSuggestion.combinationKey,
-        isFallback: true
+        message: `${createdPlants.length} plants created successfully`,
+        data: createdPlants
+      });
+      return;
+    }
+
+    // Single plant creation
+    // Validate only essential required fields
+    const requiredFields = ['plantName', 'imageUrl', 'description', 'benefits', 'sunlight', 'space', 'experience', 'maintenance', 'category', 'difficulty', 'growingTime'];
+    const missingFields = requiredFields.filter(field => !plantData[field]);
+    
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Missing required fields: ${missingFields.join(', ')}`
       });
     }
 
+    // Set default values for optional fields
+    const plantWithDefaults = {
+      ...plantData,
+      daysToGrow: plantData.daysToGrow || 60,
+      price: plantData.price || '₹20-40',
+      isActive: true,
+      archived: false
+    };
+
+    const plant = new Plant(plantWithDefaults);
+    await plant.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'Plant created successfully',
+      data: plant
+    });
+  } catch (error) {
+    console.error('Error creating plant:', error);
+    res.status(500).json({
+            success: false,
+      message: 'Error creating plant',
+      error: error.message
+    });
+  }
+};
+
+// Get plant suggestions based on quiz answers
+const getPlantSuggestionsByQuiz = async (req, res) => {
+  try {
+    const { sunlight, space, experience, time } = req.query;
+
+    // Validate required fields
+    if (!sunlight || !space || !experience || !time) {
+      return res.status(400).json({
+        success: false,
+        message: 'All quiz parameters are required: sunlight, space, experience, time'
+      });
+    }
+
+    // Build query for exact match first
+    // Map time parameter to maintenance field
+    const maintenanceMap = {
+      'low': 'low',
+      'medium': 'medium', 
+      'high': 'high'
+    };
+    
+    let query = {
+      sunlight: sunlight.toLowerCase(),
+      space: space.toLowerCase(),
+      experience: experience.toLowerCase(),
+      maintenance: maintenanceMap[time.toLowerCase()] || time.toLowerCase(),
+      isActive: true,
+      archived: false
+    };
+
+    let plants = await Plant.find(query).limit(6);
+
+    // If no exact matches, try partial matches
+    if (plants.length === 0) {
+      // Try matching 3 out of 4 criteria
+      const partialQueries = [
+        { sunlight, space, experience, isActive: true, archived: false },
+        { sunlight, space, maintenance: maintenanceMap[time.toLowerCase()] || time.toLowerCase(), isActive: true, archived: false },
+        { sunlight, experience, maintenance: maintenanceMap[time.toLowerCase()] || time.toLowerCase(), isActive: true, archived: false },
+        { space, experience, maintenance: maintenanceMap[time.toLowerCase()] || time.toLowerCase(), isActive: true, archived: false }
+      ];
+
+      for (const partialQuery of partialQueries) {
+        plants = await Plant.find(partialQuery).limit(6);
+        if (plants.length > 0) break;
+      }
+    }
+
+    // If still no matches, try matching 2 out of 4 criteria
+    if (plants.length === 0) {
+      const twoCriteriaQueries = [
+        { sunlight, space, isActive: true, archived: false },
+        { sunlight, experience, isActive: true, archived: false },
+        { space, experience, isActive: true, archived: false },
+        { experience, maintenance: maintenanceMap[time.toLowerCase()] || time.toLowerCase(), isActive: true, archived: false }
+      ];
+
+      for (const twoQuery of twoCriteriaQueries) {
+        plants = await Plant.find(twoQuery).limit(6);
+        if (plants.length > 0) break;
+      }
+    }
+
+    // If still no matches, return empty array (no fallback plants)
+    // This ensures only plants from the database are shown
+
+    // Transform plants to match frontend expectations
+    const transformedPlants = plants.map(plant => ({
+      name: plant.plantName,
+      category: plant.category,
+      description: plant.description,
+      image: plant.imageUrl,
+      growingTime: plant.growingTime,
+      sunlight: plant.sunlight,
+      space: plant.space,
+      difficulty: plant.difficulty,
+      price: plant.price,
+      benefits: plant.benefits,
+      maintenance: plant.maintenance,
+      daysToGrow: plant.daysToGrow
+    }));
+
     res.json({
       success: true,
-      plants: plantSuggestion.plants,
-      recommendationMessage: plantSuggestion.recommendationMessage,
-      combinationKey: plantSuggestion.combinationKey
+      plants: transformedPlants,
+      total: transformedPlants.length,
+      query: { sunlight, space, experience, time }
     });
 
   } catch (error) {
-    console.error('Error getting plant suggestions by combination:', error);
+    console.error('Error getting plant suggestions by quiz:', error);
     res.status(500).json({
       success: false,
       message: 'Error fetching plant suggestions',
@@ -108,138 +185,59 @@ const getPlantSuggestionsByCombination = async (req, res) => {
   }
 };
 
-const suggestPlants = async (req, res) => {
+// Update a plant
+const updatePlant = async (req, res) => {
   try {
-    const { keyword, preferences = {} } = req.body;
+    const { id } = req.params;
+    const updateData = req.body;
 
-    if (!keyword) {
-      return res.status(400).json({
+    const plant = await Plant.findByIdAndUpdate(id, updateData, { new: true, runValidators: true });
+
+    if (!plant) {
+      return res.status(404).json({
         success: false,
-        message: 'Keyword is required'
+        message: 'Plant not found'
       });
     }
 
-    let filteredPlants = [...plantData];
+    res.json({
+      success: true,
+      message: 'Plant updated successfully',
+      data: plant
+    });
+  } catch (error) {
+    console.error('Error updating plant:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating plant',
+      error: error.message
+    });
+  }
+};
 
-    // Filter based on keyword and preferences
-    switch (keyword) {
-      case 'specific':
-        // Return all plants for specific recommendations
-        break;
-      
-      case 'quick':
-      case 'quick_growing':
-        filteredPlants = plantData.filter(plant => plant.quick_growing === 'Yes');
-        break;
-      
-      case 'salad':
-      case 'salad_plants':
-        filteredPlants = plantData.filter(plant => plant.salad_suitable === 'Yes');
-        break;
-      
-      case 'smoothie':
-      case 'smoothie_plants':
-        filteredPlants = plantData.filter(plant => plant.smoothie_suitable === 'Yes');
-        break;
-      
-      case 'small_space':
-        filteredPlants = plantData.filter(plant => 
-          plant.space_needed === 'Small' && plant.container_friendly === 'Yes'
-        );
-        break;
-      
-      case 'medium_space':
-        filteredPlants = plantData.filter(plant => plant.space_needed === 'Medium');
-        break;
-      
-      case 'large_space':
-        filteredPlants = plantData.filter(plant => plant.space_needed === 'Large');
-        break;
-      
-      case 'full_sun':
-        filteredPlants = plantData.filter(plant => plant.sunlight_requirement === 'Full Sun');
-        break;
-      
-      case 'partial_shade':
-        filteredPlants = plantData.filter(plant => plant.sunlight_requirement === 'Partial Shade');
-        break;
-      
-      case 'slow_growing':
-        filteredPlants = plantData.filter(plant => parseInt(plant.growing_time_days) > 90);
-        break;
-      
-      case 'indoor':
-        filteredPlants = plantData.filter(plant => plant.indoor_suitable === 'Yes');
-        break;
-      
-      case 'outdoor':
-        filteredPlants = plantData.filter(plant => plant.indoor_suitable === 'No');
-        break;
-      
-      case 'herbs':
-        filteredPlants = plantData.filter(plant => plant.category === 'Herb');
-        break;
-      
-      case 'vegetables':
-        filteredPlants = plantData.filter(plant => plant.category === 'Vegetable');
-        break;
-      
-      case 'fruits':
-        filteredPlants = plantData.filter(plant => plant.category === 'Fruit');
-        break;
-      
-      default:
-        // For unknown keywords, return a mix of popular plants
-        filteredPlants = plantData.filter(plant => 
-          plant.quick_growing === 'Yes' || plant.salad_suitable === 'Yes'
-        );
+// Delete a plant (soft delete by setting archived to true)
+const deletePlant = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const plant = await Plant.findByIdAndUpdate(id, { archived: true, isActive: false }, { new: true });
+
+    if (!plant) {
+      return res.status(404).json({
+        success: false,
+        message: 'Plant not found'
+      });
     }
-
-    // Apply additional filters based on preferences
-    if (preferences.space) {
-      filteredPlants = filteredPlants.filter(plant => 
-        plant.space_needed.toLowerCase() === preferences.space.toLowerCase()
-      );
-    }
-
-    if (preferences.sunlight) {
-      filteredPlants = filteredPlants.filter(plant => 
-        plant.sunlight_requirement.toLowerCase() === preferences.sunlight.toLowerCase()
-      );
-    }
-
-    if (preferences.time) {
-      const maxDays = parseInt(preferences.time);
-      filteredPlants = filteredPlants.filter(plant => 
-        parseInt(plant.growing_time_days) <= maxDays
-      );
-    }
-
-    if (preferences.indoor) {
-      filteredPlants = filteredPlants.filter(plant => 
-        plant.indoor_suitable === 'Yes'
-      );
-    }
-
-    // Sort by growing time for better recommendations
-    filteredPlants.sort((a, b) => parseInt(a.growing_time_days) - parseInt(b.growing_time_days));
-
-    // Limit results
-    const limitedPlants = filteredPlants.slice(0, 12);
 
     res.json({
       success: true,
-      plants: limitedPlants,
-      total: limitedPlants.length,
-      keyword,
-      preferences
+      message: 'Plant deleted successfully'
     });
-
   } catch (error) {
-    console.error('Error suggesting plants:', error);
+    console.error('Error deleting plant:', error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching plant suggestions',
+      message: 'Error deleting plant',
       error: error.message
     });
   }
@@ -315,7 +313,7 @@ const getAllPlants = async (req, res) => {
 const getPlantById = async (req, res) => {
   try {
     const { id } = req.params;
-    const plant = plantData.find(p => p.name.toLowerCase() === id.toLowerCase());
+    const plant = await Plant.findById(id);
     
     if (!plant) {
       return res.status(404).json({
@@ -326,7 +324,7 @@ const getPlantById = async (req, res) => {
 
     res.json({
       success: true,
-      plant
+      data: plant
     });
   } catch (error) {
     console.error('Error fetching plant:', error);
@@ -338,11 +336,121 @@ const getPlantById = async (req, res) => {
   }
 };
 
+// Get plants by category
+const getPlantsByCategory = async (req, res) => {
+  try {
+    const { category } = req.params;
+    const { page = 1, limit = 12 } = req.query;
+
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
+
+    const [plants, total] = await Promise.all([
+      Plant.find({ 
+        category: category.toLowerCase(), 
+        isActive: true, 
+        archived: false 
+      })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum),
+      Plant.countDocuments({ 
+        category: category.toLowerCase(), 
+        isActive: true, 
+        archived: false 
+      })
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        plants,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          pages: Math.ceil(total / limitNum),
+          hasNext: pageNum * limitNum < total,
+          hasPrev: pageNum > 1
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching plants by category:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching plants by category',
+      error: error.message
+    });
+  }
+};
+
+// Search plants
+const searchPlants = async (req, res) => {
+  try {
+    const { q, page = 1, limit = 12 } = req.query;
+
+    if (!q) {
+      return res.status(400).json({
+        success: false,
+        message: 'Search query is required'
+      });
+    }
+
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
+
+    const [plants, total] = await Promise.all([
+      Plant.find({
+        $text: { $search: q },
+        isActive: true,
+        archived: false
+      })
+      .sort({ score: { $meta: 'textScore' } })
+      .skip(skip)
+      .limit(limitNum),
+      Plant.countDocuments({
+        $text: { $search: q },
+        isActive: true,
+        archived: false
+      })
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        plants,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          pages: Math.ceil(total / limitNum),
+          hasNext: pageNum * limitNum < total,
+          hasPrev: pageNum > 1
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error searching plants:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error searching plants',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
-  suggestPlants,
-  getPlantSuggestionsByCombination,
+  createPlant,
+  getPlantSuggestionsByQuiz,
+  updatePlant,
+  deletePlant,
   getAllPlants,
-  getPlantById
+  getPlantById,
+  getPlantsByCategory,
+  searchPlants
 };
 
 

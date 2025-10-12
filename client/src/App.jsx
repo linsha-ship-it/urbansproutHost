@@ -5,6 +5,7 @@ import Navbar from './components/layout/Navbar'
 
 // Import page components
 import Home from './pages/Home'
+import UrbanSproutLanding from './UrbanSproutLanding'
 import Login from './pages/auth/Login'
 import Signup from './pages/auth/Signup'
 import AdminRegister from './pages/auth/AdminRegister'
@@ -24,7 +25,6 @@ import AdminProducts from './pages/admin/AdminProducts'
 import AdminBlogPosts from './pages/admin/AdminBlogPosts'
 import AdminOrders from './pages/admin/AdminOrders'
 import AdminSettings from './pages/admin/AdminSettings'
-import AdminPlants from './pages/admin/AdminPlants'
 import InventoryInsights from './pages/admin/InventoryInsights'
 
 // Import dashboard components
@@ -108,52 +108,124 @@ const App = () => {
   return (
     <Router>
       <div className="min-h-screen bg-gray-50">
-        <Navbar />
-        <div className="pt-16">
-          <Routes>
+        <Routes>
           {/* Public Routes */}
-            <Route path="/" element={<Home />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-          <Route path="/admin-register" element={<AdminRegister />} />
-          <Route path="/reset-password/:token" element={<ResetPassword />} />
-          <Route path="/blog" element={<Blog />} />
-          <Route path="/community" element={<Blog />} />
-          <Route path="/store" element={<Store />} />
-          <Route path="/plant-suggestion" element={<PlantSuggestion />} />
-          <Route path="/unauthorized" element={<Unauthorized />} />
+          <Route path="/" element={<UrbanSproutLanding />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={
+            <>
+              <Navbar />
+              <div className="pt-16">
+                <Signup />
+              </div>
+            </>
+          } />
+          <Route path="/admin-register" element={
+            <>
+              <Navbar />
+              <div className="pt-16">
+                <AdminRegister />
+              </div>
+            </>
+          } />
+          <Route path="/reset-password/:token" element={
+            <>
+              <Navbar />
+              <div className="pt-16">
+                <ResetPassword />
+              </div>
+            </>
+          } />
+          <Route path="/blog" element={
+            <>
+              <Navbar />
+              <div className="pt-16">
+                <Blog />
+              </div>
+            </>
+          } />
+          <Route path="/community" element={
+            <>
+              <Navbar />
+              <div className="pt-16">
+                <Blog />
+              </div>
+            </>
+          } />
+          <Route path="/store" element={
+            <>
+              <Navbar />
+              <div className="pt-16">
+                <Store />
+              </div>
+            </>
+          } />
+          <Route path="/plant-suggestion" element={
+            <>
+              <Navbar />
+              <div className="pt-16">
+                <PlantSuggestion />
+              </div>
+            </>
+          } />
+          <Route path="/unauthorized" element={
+            <>
+              <Navbar />
+              <div className="pt-16">
+                <Unauthorized />
+              </div>
+            </>
+          } />
 
           {/* Protected Routes */}
           <Route path="/profile" element={
             <ProtectedRoute>
-              <Profile />
+              <Navbar />
+              <div className="pt-16">
+                <Profile />
+              </div>
             </ProtectedRoute>
           } />
           <Route path="/notification-debug" element={
             <ProtectedRoute>
-              <NotificationDebug />
+              <Navbar />
+              <div className="pt-16">
+                <NotificationDebug />
+              </div>
             </ProtectedRoute>
           } />
           <Route path="/dashboard" element={
             <ProtectedRoute>
-              <Dashboard />
+              <Navbar />
+              <div className="pt-16">
+                <Dashboard />
+              </div>
             </ProtectedRoute>
           } />
           <Route path="/my-garden-journal" element={
             <ProtectedRoute>
-              <MyGardenJournal />
+              <Navbar />
+              <div className="pt-16">
+                <MyGardenJournal />
+              </div>
             </ProtectedRoute>
           } />
           <Route path="/plant-detail/:plantId" element={
             <ProtectedRoute>
-              <PlantDetail />
+              <Navbar />
+              <div className="pt-16">
+                <PlantDetail />
+              </div>
             </ProtectedRoute>
           } />
 
           {/* Admin Routes */}
           <Route path="/admin" element={
             <ProtectedRoute requiredRole="admin">
-              <AdminDashboard />
+              <Navbar />
+              <div className="pt-16">
+                <AdminDashboard />
+              </div>
             </ProtectedRoute>
           } />
           <Route path="/admin/users" element={
@@ -191,13 +263,6 @@ const App = () => {
               </AdminLayout>
             </ProtectedRoute>
           } />
-          <Route path="/admin/plants" element={
-            <ProtectedRoute requiredRole="admin">
-              <AdminLayout>
-                <AdminPlants />
-              </AdminLayout>
-            </ProtectedRoute>
-          } />
           <Route path="/admin/settings" element={
             <ProtectedRoute requiredRole="admin">
               <AdminLayout>
@@ -208,8 +273,7 @@ const App = () => {
 
           {/* Catch all route */}
           <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </div>
+        </Routes>
       </div>
     </Router>
   )

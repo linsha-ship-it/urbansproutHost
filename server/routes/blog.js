@@ -213,9 +213,22 @@ router.get('/mine', auth, async (req, res) => {
     const limitNum = parseInt(limit)
     const skip = (pageNum - 1) * limitNum
 
-    const filter = { authorEmail: req.user.email }
+    const filter = { 
+      authorEmail: req.user.email,
+      approvalStatus: 'approved',
+      status: 'published'
+    }
 
     const totalPosts = await Blog.countDocuments(filter)
+    
+    // If count=true, return only the count
+    if (req.query.count === 'true') {
+      return res.json({
+        success: true,
+        count: totalPosts
+      })
+    }
+    
     const blogs = await Blog.find(filter)
       .sort(sortOption)
       .skip(skip)
@@ -248,13 +261,21 @@ router.get('/my-posts', auth, async (req, res) => {
   try {
     const { page, limit, skip } = req.pagination || { page: 1, limit: 10, skip: 0 };
 
-    const posts = await Blog.find({ authorId: req.user._id })
+    const posts = await Blog.find({ 
+      authorId: req.user._id,
+      approvalStatus: 'approved',
+      status: 'published'
+    })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
       .lean();
 
-    const total = await Blog.countDocuments({ authorId: req.user._id });
+    const total = await Blog.countDocuments({ 
+      authorId: req.user._id,
+      approvalStatus: 'approved',
+      status: 'published'
+    });
 
     res.json({
       success: true,

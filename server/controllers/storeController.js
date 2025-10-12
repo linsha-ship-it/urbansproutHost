@@ -530,11 +530,34 @@ const createRazorpayOrder = asyncHandler(async (req, res, next) => {
   }
 
   try {
+    // Clean notes to avoid 20KB limit - remove large image data
+    const cleanNotes = {};
+    if (notes) {
+      Object.keys(notes).forEach(key => {
+        if (typeof notes[key] === 'string' && notes[key].length > 1000) {
+          // Skip large strings (like base64 images)
+          cleanNotes[key] = 'large_data_removed';
+        } else if (typeof notes[key] === 'object') {
+          // Clean nested objects
+          cleanNotes[key] = {};
+          Object.keys(notes[key]).forEach(nestedKey => {
+            if (typeof notes[key][nestedKey] === 'string' && notes[key][nestedKey].length > 1000) {
+              cleanNotes[key][nestedKey] = 'large_data_removed';
+            } else {
+              cleanNotes[key][nestedKey] = notes[key][nestedKey];
+            }
+          });
+        } else {
+          cleanNotes[key] = notes[key];
+        }
+      });
+    }
+
     const options = {
       amount: Math.round(amount * 100), // Convert to paise
       currency,
       receipt: receipt || `receipt_${Date.now()}`,
-      notes: notes || {}
+      notes: cleanNotes
     };
 
     console.log('Razorpay order options:', options);
@@ -805,7 +828,7 @@ const cancelProductOrder = asyncHandler(async (req, res, next) => {
 // @access  Private
 const getCart = asyncHandler(async (req, res) => {
   try {
-    let cart = await Cart.findOne({ user: req.user._id }).populate('items.product', 'name images price regularPrice discountPrice stock category');
+    let cart = await Cart.findOne({ user: req.user._id }).populate('items.product', 'name images regularPrice discountPrice stock category');
     
     if (!cart) {
       // Create empty cart if doesn't exist
@@ -859,7 +882,7 @@ const saveCart = asyncHandler(async (req, res) => {
         new: true,
         setDefaultsOnInsert: true
       }
-    ).populate('items.product', 'name images price regularPrice discountPrice stock category');
+    ).populate('items.product', 'name images regularPrice discountPrice stock category description sku');
     
     res.json({
       success: true,
@@ -881,7 +904,7 @@ const saveCart = asyncHandler(async (req, res) => {
 // @access  Private
 const getWishlist = asyncHandler(async (req, res) => {
   try {
-    let wishlist = await Wishlist.findOne({ user: req.user._id }).populate('items.product', 'name images price regularPrice discountPrice stock category');
+    let wishlist = await Wishlist.findOne({ user: req.user._id }).populate('items.product', 'name images regularPrice discountPrice stock category description sku');
     
     if (!wishlist) {
       // Create empty wishlist if doesn't exist
@@ -934,7 +957,7 @@ const saveWishlist = asyncHandler(async (req, res) => {
         new: true,
         setDefaultsOnInsert: true
       }
-    ).populate('items.product', 'name images price regularPrice discountPrice stock category');
+    ).populate('items.product', 'name images regularPrice discountPrice stock category description sku');
     
     res.json({
       success: true,
@@ -949,6 +972,189 @@ const saveWishlist = asyncHandler(async (req, res) => {
       error: error.message
     });
   }
+});
+
+// @desc    Purchase items from wishlist
+// @route   POST /api/store/wishlist/purchase
+// @access  Private
+const purchaseFromWishlist = asyncHandler(async (req, res, next) => {
+  const { items, shippingAddress, paymentMethod = 'Credit Card' } = req.body;
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return next(new AppError('No items provided for purchase', 400));
+  }
+
+  if (!shippingAddress) {
+    return next(new AppError('Shipping address is required', 400));
+  }
+
+  // Validate and calculate pricing
+  let subtotal = 0;
+  const orderItems = [];
+  const stockReductions = []; // Track stock reductions for rollback if needed
+
+  try {
+    for (const item of items) {
+      const productId = item.id || item._id || item.productId;
+      const product = await Product.findById(productId);
+      
+      if (!product) {
+        return next(new AppError(`Product not found: ${productId}`, 400));
+      }
+      
+      if (!product.published || product.archived) {
+        return next(new AppError(`Product ${product.name} is not available for purchase`, 400));
+      }
+      
+      if (product.stock < item.quantity) {
+        return next(new AppError(`Insufficient stock for ${product.name}. Available: ${product.stock}, Requested: ${item.quantity}`, 400));
+      }
+      
+      // Calculate price (use discount price if available, otherwise regular price)
+      const currentPrice = product.appliedDiscount?.calculatedPrice || product.discountPrice || product.regularPrice;
+      const itemTotal = currentPrice * item.quantity;
+      subtotal += itemTotal;
+      
+      // Track stock reduction for potential rollback
+      const oldStock = product.stock;
+      product.stock -= item.quantity;
+      await product.save();
+      
+      stockReductions.push({
+        productId: productId,
+        productName: product.name,
+        oldStock: oldStock,
+        newStock: product.stock,
+        quantity: item.quantity
+      });
+      
+      console.log(`✅ Stock reduced for ${product.name}: ${oldStock} -> ${product.stock}`);
+      
+      orderItems.push({
+        product: product._id,
+        productId: productId,
+        quantity: Number(item.quantity || 1),
+        price: Number(currentPrice),
+        name: String(product.name),
+        image: String(product.images[0] || '')
+      });
+    }
+  } catch (stockError) {
+    // Rollback stock reductions if order creation fails
+    console.error('❌ Error during stock reduction, rolling back...', stockError);
+    for (const reduction of stockReductions) {
+      try {
+        await Product.findByIdAndUpdate(reduction.productId, { stock: reduction.oldStock });
+        console.log(`🔄 Stock rolled back for ${reduction.productName}: ${reduction.newStock} -> ${reduction.oldStock}`);
+      } catch (rollbackError) {
+        console.error(`❌ Failed to rollback stock for ${reduction.productName}:`, rollbackError);
+      }
+    }
+    return next(new AppError('Failed to update product stock', 500));
+  }
+
+  // Calculate tax and shipping
+  const tax = subtotal * 0.08; // 8% tax
+  const shippingCost = subtotal > 50 ? 0 : 9.99; // Free shipping over ₹50
+  const total = subtotal + tax + shippingCost;
+
+  // Create order
+  const order = await Order.create({
+    user: req.user._id,
+    items: orderItems,
+    shippingAddress: {
+      fullName: shippingAddress.fullName,
+      address: shippingAddress.address,
+      city: shippingAddress.city,
+      postalCode: shippingAddress.postalCode,
+      country: shippingAddress.country,
+      phone: shippingAddress.phone
+    },
+    paymentMethod: paymentMethod,
+    subtotal: subtotal,
+    shipping: shippingCost,
+    tax: tax,
+    total: total,
+    status: 'pending',
+    statusHistory: [{
+      status: 'pending',
+      note: 'Order created from wishlist',
+      updatedBy: req.user._id,
+      updatedAt: new Date()
+    }]
+  });
+
+  // Keep items in wishlist - don't remove them after purchase
+  console.log(`✅ Order created from wishlist - items remain in wishlist for future reference`);
+
+  // Populate order with product details
+  await order.populate('items.product', 'name images category');
+
+  // Emit real-time events for admin dashboard
+  const io = req.app.get('io');
+  if (io) {
+    io.emit('orderCreated', {
+      orderId: order._id,
+      orderNumber: order.orderNumber,
+      total: order.total,
+      itemsCount: order.items.length,
+      timestamp: new Date(),
+      source: 'wishlist'
+    });
+    
+    // Emit stock update events for each product
+    for (const item of orderItems) {
+      io.emit('stockUpdated', {
+        productId: item.productId,
+        productName: item.name,
+        oldStock: stockReductions.find(r => r.productId === item.productId)?.oldStock || 0,
+        newStock: stockReductions.find(r => r.productId === item.productId)?.newStock || 0,
+        quantitySold: item.quantity,
+        timestamp: new Date()
+      });
+    }
+    
+    console.log('✅ Real-time events emitted for wishlist purchase');
+  }
+
+  // Send order confirmation email
+  try {
+    const user = await User.findById(req.user._id);
+    if (user && user.email && user.role !== 'admin') {
+      const orderDetails = {
+        orderId: order._id.toString().slice(-8),
+        orderNumber: order.orderNumber,
+        orderDate: order.createdAt,
+        totalAmount: order.total,
+        items: order.items.map(item => ({
+          name: item.name || item.product?.name || 'Product',
+          quantity: item.quantity,
+          price: item.price
+        })),
+        shippingAddress: `${order.shippingAddress.fullName}, ${order.shippingAddress.address}, ${order.shippingAddress.city}, ${order.shippingAddress.postalCode}, ${order.shippingAddress.country}`,
+        estimatedDelivery: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString(),
+        paymentMethod: order.paymentMethod,
+        paymentStatus: 'Pending'
+      };
+
+      // Send email notification
+      await emailService.sendOrderConfirmationEmail(user.email, orderDetails);
+      console.log(`✅ Order confirmation email sent to ${user.email}`);
+    }
+  } catch (emailError) {
+    console.error('❌ Error sending order confirmation email:', emailError);
+    // Don't fail the order if email fails
+  }
+
+  res.status(201).json({
+    success: true,
+    message: 'Order created successfully from wishlist',
+    data: {
+      order: order,
+      purchasedItems: items.length,
+      itemsRemainInWishlist: true
+    }
+  });
 });
 
 module.exports = {
@@ -969,5 +1175,6 @@ module.exports = {
   getCart,
   saveCart,
   getWishlist,
-  saveWishlist
+  saveWishlist,
+  purchaseFromWishlist
 };

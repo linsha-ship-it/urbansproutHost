@@ -19,7 +19,6 @@ const AdminLayout = ({ children }) => {
     { name: 'Orders', path: '/admin/orders', icon: ShoppingBag },
     { name: 'Inventory Insights', path: '/admin/inventory-insights', icon: BarChart3 },
     { name: 'Settings', path: '/admin/settings', icon: Cog },
-    { name: 'Plants', path: '/admin/plants', icon: Package },
   ];
 
   const isActive = (path) => {

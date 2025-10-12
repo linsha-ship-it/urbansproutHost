@@ -74,14 +74,19 @@ const Login = () => {
       >
         {/* Header */}
         <div className="text-center">
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="mx-auto h-16 w-16 bg-forest-green-500 rounded-full flex items-center justify-center mb-4"
-          >
-            <Leaf className="h-8 w-8 text-cream-100" />
-          </motion.div>
+          <Link to="/" className="inline-block">
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="mx-auto h-16 w-16 bg-forest-green-500 rounded-full flex items-center justify-center mb-4 hover:bg-forest-green-600 transition-colors cursor-pointer"
+            >
+              <Leaf className="h-8 w-8 text-cream-100" />
+            </motion.div>
+          </Link>
+          <Link to="/" className="block mb-2">
+            <h1 className="text-4xl font-bold text-forest-green-800 hover:text-forest-green-600 transition-colors cursor-pointer">UrbanSprout</h1>
+          </Link>
           <h2 className="text-3xl font-bold text-forest-green-800">Welcome Back</h2>
           <p className="mt-2 text-forest-green-600">Sign in to your UrbanSprout account</p>
         </div>

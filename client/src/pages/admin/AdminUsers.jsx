@@ -642,18 +642,20 @@ const AdminUsers = () => {
                   <Ban className="h-4 w-4 mr-2" />
                   Suspend
                 </button>
-                <button
-                  onClick={() => {
-                    if (confirm('Are you sure you want to delete this user?')) {
-                      handleUserAction(userDetails._id, 'delete');
-                      setShowUserDetails(false);
-                    }
-                  }}
-                  className="flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete
-                </button>
+                {userDetails.role !== 'admin' && (
+                  <button
+                    onClick={() => {
+                      if (confirm('Are you sure you want to delete this user?')) {
+                        handleUserAction(userDetails._id, 'delete');
+                        setShowUserDetails(false);
+                      }
+                    }}
+                    className="flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -850,9 +852,29 @@ const AdminUsers = () => {
               </button>
               <button
                 onClick={() => {
-                  if (confirm('Are you sure you want to delete all selected users?')) {
-                    handleBulkAction('delete');
+                  // Filter out admin users from deletion
+                  const nonAdminUsers = selectedUsers.filter(userId => {
+                    const user = users.find(u => u._id === userId);
+                    return user && user.role !== 'admin';
+                  });
+                  
+                  if (nonAdminUsers.length === 0) {
+                    alert('No non-admin users selected for deletion');
+                    return;
                   }
+                  
+                  if (nonAdminUsers.length < selectedUsers.length) {
+                    const adminCount = selectedUsers.length - nonAdminUsers.length;
+                    if (!confirm(`Admin users cannot be deleted. ${adminCount} admin user(s) will be skipped. Continue with deleting ${nonAdminUsers.length} non-admin user(s)?`)) {
+                      return;
+                    }
+                  } else {
+                    if (!confirm('Are you sure you want to delete all selected users?')) {
+                      return;
+                    }
+                  }
+                  
+                  handleBulkAction('delete', { userIds: nonAdminUsers });
                 }}
                 className="flex items-center justify-center px-4 py-3 bg-red-800 text-white rounded-lg hover:bg-red-900 transition-colors"
               >

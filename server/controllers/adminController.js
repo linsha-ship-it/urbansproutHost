@@ -310,6 +310,11 @@ const deleteUser = asyncHandler(async (req, res, next) => {
     return next(new AppError('You cannot delete your own account', 400));
   }
 
+  // Prevent deletion of admin users
+  if (user.role === 'admin') {
+    return next(new AppError('Cannot delete admin users', 400));
+  }
+
   await User.findByIdAndDelete(req.params.id);
 
   res.json({
@@ -318,59 +323,6 @@ const deleteUser = asyncHandler(async (req, res, next) => {
   });
 });
 
-// @desc    Create new plant
-// @route   POST /api/admin/plants
-// @access  Private (Admin only)
-const createPlant = asyncHandler(async (req, res) => {
-  const plant = await Plant.create(req.body);
-
-  res.status(201).json({
-    success: true,
-    message: 'Plant created successfully',
-    data: { plant }
-  });
-});
-
-// @desc    Update plant
-// @route   PUT /api/admin/plants/:id
-// @access  Private (Admin only)
-const updatePlant = asyncHandler(async (req, res, next) => {
-  const plant = await Plant.findById(req.params.id);
-
-  if (!plant) {
-    return next(new AppError('Plant not found', 404));
-  }
-
-  const updatedPlant = await Plant.findByIdAndUpdate(
-    req.params.id,
-    req.body,
-    { new: true, runValidators: true }
-  );
-
-  res.json({
-    success: true,
-    message: 'Plant updated successfully',
-    data: { plant: updatedPlant }
-  });
-});
-
-// @desc    Delete plant
-// @route   DELETE /api/admin/plants/:id
-// @access  Private (Admin only)
-const deletePlant = asyncHandler(async (req, res, next) => {
-  const plant = await Plant.findById(req.params.id);
-
-  if (!plant) {
-    return next(new AppError('Plant not found', 404));
-  }
-
-  await Plant.findByIdAndDelete(req.params.id);
-
-  res.json({
-    success: true,
-    message: 'Plant deleted successfully'
-  });
-});
 
 // @desc    Get all orders
 // @route   GET /api/admin/orders
@@ -1158,6 +1110,10 @@ const bulkUserOperations = asyncHandler(async (req, res, next) => {
           user.blockReason = null;
           break;
         case 'delete':
+          if (user.role === 'admin') {
+            results.push({ userId: user._id, success: false, message: 'Cannot delete admin users' });
+            continue;
+          }
           await User.findByIdAndDelete(user._id);
           results.push({ userId: user._id, success: true, message: 'User deleted' });
           continue;
@@ -1999,14 +1955,83 @@ const getInventoryInsights = asyncHandler(async (req, res, next) => {
   }
 
   // Calculate slow-moving products (products with low sales relative to stock)
-  const slowMovingProducts = productSalesData
-    .filter(item => item.currentStock > 0)
-    .map(item => ({
-      ...item,
-      salesVelocity: item.totalSold / Math.max(1, 30) // sales per day (using 30 days as default)
-    }))
-    .sort((a, b) => a.salesVelocity - b.salesVelocity)
+  let slowMovingProducts = [];
+  
+  if (productSalesData.length > 0) {
+    // Use actual sales data
+    slowMovingProducts = productSalesData
+      .filter(item => item.currentStock > 0)
+      .map(item => ({
+        ...item,
+        salesVelocity: item.totalSold / Math.max(1, 30), // sales per day (using 30 days as default)
+        stockTurnover: item.stockTurnover || 0
+      }))
+      .sort((a, b) => a.salesVelocity - b.salesVelocity)
+      .slice(0, 10);
+  } else {
+    // Fallback: Get products with low sales or no sales
+    console.log(`⚠️ No sales data found - using fallback for slow-moving products`);
+    
+    // Get all products and calculate slow-moving based on stock vs sales
+    const allProducts = await Product.find({ 
+      archived: false, 
+      published: true,
+      stock: { $gt: 0 }
+    }).select('name category stock regularPrice salesCount totalRevenue createdAt');
+    
+    // Get sales data from orders for these products
+    const productSalesFromOrders = await Order.aggregate([
+      { $unwind: '$items' },
+      { $group: {
+        _id: '$items.name',
+        totalSold: { $sum: '$items.quantity' },
+        totalRevenue: { $sum: { $multiply: ['$items.price', '$items.quantity'] } },
+        orderCount: { $sum: 1 }
+      }},
+      { $sort: { totalSold: 1 } } // Sort by lowest sales first
+    ]);
+    
+    // Match products with their sales data
+    slowMovingProducts = allProducts.map(product => {
+      const salesData = productSalesFromOrders.find(sale => 
+        sale._id.toLowerCase().includes(product.name.toLowerCase()) ||
+        product.name.toLowerCase().includes(sale._id.toLowerCase())
+      );
+      
+      const totalSold = salesData ? salesData.totalSold : 0;
+      const totalRevenue = salesData ? salesData.totalRevenue : 0;
+      const daysSinceCreated = Math.max(1, (now - product.createdAt) / (1000 * 60 * 60 * 24));
+      const salesVelocity = totalSold / daysSinceCreated;
+      const stockTurnover = product.stock > 0 ? totalSold / product.stock : 0;
+      
+      return {
+        productId: product._id,
+        productName: product.name,
+        category: product.category,
+        currentStock: product.stock,
+        totalSold,
+        totalRevenue,
+        salesVelocity,
+        stockTurnover,
+        avgPrice: product.regularPrice,
+        daysSinceCreated: Math.round(daysSinceCreated)
+      };
+    })
+    .filter(item => item.currentStock > 0) // Only products with stock
+    .sort((a, b) => a.salesVelocity - b.salesVelocity) // Sort by lowest sales velocity
     .slice(0, 10);
+    
+    console.log(`🐌 Slow-moving products calculated: ${slowMovingProducts.length} products`);
+    if (slowMovingProducts.length > 0) {
+      console.log(`🐌 Sample slow-moving products:`, slowMovingProducts.slice(0, 3).map(item => ({
+        productName: item.productName,
+        totalSold: item.totalSold,
+        currentStock: item.currentStock,
+        salesVelocity: item.salesVelocity.toFixed(2),
+        stockTurnover: item.stockTurnover.toFixed(2)
+      })));
+    }
+  }
 
   // Get fast-moving products using analytics service
   const fastMovingProducts = await analyticsService.getFastMovingProducts(period, 10);
@@ -3012,126 +3037,6 @@ const getAllPlantSuggestions = asyncHandler(async (req, res, next) => {
   });
 });
 
-// ==================== ADMIN PLANTS (CRUD/BULK) ====================
-
-// @desc    List plants (admin view) with pagination/search
-// @route   GET /api/admin/plants
-// @access  Private (Admin only)
-const getAdminPlants = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 10, search } = req.query;
-  const pageNum = parseInt(page);
-  const limitNum = parseInt(limit);
-  const skip = (pageNum - 1) * limitNum;
-
-  const query = {};
-  if (search) {
-    query.$or = [
-      { plantName: { $regex: search, $options: 'i' } },
-      { description: { $regex: search, $options: 'i' } },
-      { benefits: { $regex: search, $options: 'i' } }
-    ];
-  }
-
-  const [plants, total] = await Promise.all([
-    Plant.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
-    Plant.countDocuments(query)
-  ]);
-
-  res.json({
-    success: true,
-    data: {
-      plants,
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total,
-        pages: Math.ceil(total / limitNum),
-        hasNext: pageNum * limitNum < total,
-        hasPrev: pageNum > 1
-      }
-    }
-  });
-});
-
-// @desc    Bulk upload plants via CSV/JSON
-// @route   POST /api/admin/plants/upload
-// @access  Private (Admin only)
-const uploadPlantsBulk = asyncHandler(async (req, res, next) => {
-  if (!req.file && !req.body?.plants) {
-    return next(new AppError('No file or plants payload provided', 400));
-  }
-
-  let rows = [];
-
-  if (req.body?.plants) {
-    try {
-      rows = Array.isArray(req.body.plants) ? req.body.plants : JSON.parse(req.body.plants);
-    } catch (e) {
-      return next(new AppError('Invalid plants JSON payload', 400));
-    }
-  } else if (req.file) {
-    const path = require('path');
-    const fs = require('fs');
-    const ext = (req.file.originalname.split('.').pop() || '').toLowerCase();
-    if (ext === 'csv') {
-      const csv = require('csv-parser');
-      rows = await new Promise((resolve, reject) => {
-        const out = [];
-        fs.createReadStream(req.file.path)
-          .pipe(csv())
-          .on('data', (d) => out.push(d))
-          .on('end', () => resolve(out))
-          .on('error', reject);
-      });
-    } else if (ext === 'json') {
-      const content = fs.readFileSync(req.file.path, 'utf8');
-      rows = JSON.parse(content);
-    } else {
-      return next(new AppError('Unsupported file format. Use CSV or JSON.', 400));
-    }
-    // Clean up uploaded file
-    try { fs.unlinkSync(req.file.path); } catch (_) {}
-  }
-
-  if (!rows || rows.length === 0) {
-    return next(new AppError('No rows found to import', 400));
-  }
-
-  let processed = 0;
-  const errors = [];
-  for (const [idx, row] of rows.entries()) {
-    try {
-      const doc = {
-        plantName: row.plantName || row.name,
-        imageUrl: row.imageUrl || row.image,
-        description: row.description,
-        benefits: row.benefits,
-        daysToGrow: Number(row.daysToGrow || row.growingTime || row.growingTimeDays),
-        maintenance: row.maintenance || row.difficulty,
-        sunlight: row.sunlight,
-        space: row.space,
-        experience: row.experience,
-        time: row.time,
-        goal: row.goal,
-        isActive: row.isActive !== false
-      };
-
-      // Basic validation
-      const required = ['plantName', 'imageUrl', 'description', 'benefits', 'daysToGrow', 'maintenance', 'sunlight', 'space', 'experience', 'time', 'goal'];
-      const missing = required.filter((k) => !doc[k] && doc[k] !== 0);
-      if (missing.length) {
-        throw new Error(`Missing fields: ${missing.join(', ')}`);
-      }
-
-      await Plant.create(doc);
-      processed++;
-    } catch (e) {
-      errors.push(`Row ${idx + 1}: ${e.message}`);
-    }
-  }
-
-  res.json({ success: true, message: 'Import completed', data: { processed, errors: errors.length, errorDetails: errors } });
-});
 
 // @desc    Get single plant suggestion
 // @route   GET /api/admin/plant-suggestions/:id
@@ -3397,11 +3302,8 @@ module.exports = {
   flagUser,
   bulkUserOperations,
   getUserDetails,
-  createPlant,
   sendOrderEmail,
   sendOrderStatusNotification,
-  updatePlant,
-  deletePlant,
   getAllOrders,
   updateOrderStatus,
   getAllBlogPosts,
@@ -3447,7 +3349,4 @@ module.exports = {
   deletePlantSuggestion,
   togglePlantSuggestionStatus,
   getPlantSuggestionStats,
-  // Admin Plants management (list and bulk upload)
-  getAdminPlants,
-  uploadPlantsBulk
 };

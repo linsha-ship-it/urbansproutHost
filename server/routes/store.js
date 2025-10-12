@@ -11,7 +11,8 @@ const {
   getCart,
   saveCart,
   getWishlist,
-  saveWishlist
+  saveWishlist,
+  purchaseFromWishlist
 } = require('../controllers/storeController');
 
 // GET /store - Get all products with filters
@@ -459,5 +460,6 @@ router.post('/cart', auth, saveCart);
 // Wishlist Routes
 router.get('/wishlist', auth, getWishlist);
 router.post('/wishlist', auth, saveWishlist);
+router.post('/wishlist/purchase', auth, purchaseFromWishlist);
 
 module.exports = router;

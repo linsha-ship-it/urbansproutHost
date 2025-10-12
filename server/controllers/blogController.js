@@ -542,13 +542,21 @@ const rejectPost = asyncHandler(async (req, res, next) => {
 const getMyPosts = asyncHandler(async (req, res) => {
   const { page, limit, skip } = req.pagination;
 
-  const posts = await Blog.find({ authorId: req.user._id })
+  const posts = await Blog.find({ 
+    authorId: req.user._id,
+    approvalStatus: 'approved',
+    status: 'published'
+  })
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit)
     .lean();
 
-  const total = await Blog.countDocuments({ authorId: req.user._id });
+  const total = await Blog.countDocuments({ 
+    authorId: req.user._id,
+    approvalStatus: 'approved',
+    status: 'published'
+  });
 
   res.json({
     success: true,

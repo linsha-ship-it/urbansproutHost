@@ -48,7 +48,23 @@ const userGardenSchema = new mongoose.Schema({
     category: {
       type: String,
       required: true,
-      enum: ['Vegetables', 'Herbs', 'Fruits']
+      enum: ['Vegetables', 'Herbs', 'Fruits', 'vegetables', 'fruits', 'herbs', 'flowers', 'succulents'],
+      set: function(value) {
+        // Normalize category to capitalized format
+        const normalized = value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+        // Map specific categories
+        const categoryMap = {
+          'Vegetables': 'Vegetables',
+          'Herbs': 'Herbs', 
+          'Fruits': 'Fruits',
+          'vegetables': 'Vegetables',
+          'fruits': 'Fruits',
+          'herbs': 'Herbs',
+          'flowers': 'Herbs', // Map flowers to Herbs for compatibility
+          'succulents': 'Herbs' // Map succulents to Herbs for compatibility
+        };
+        return categoryMap[value] || normalized;
+      }
     },
     description: {
       type: String,
@@ -86,7 +102,7 @@ const userGardenSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['planted', 'growing', 'harvested', 'completed'],
+    enum: ['planted', 'growing', 'first_harvest', 'multiple_harvests', 'completed', 'failed'],
     default: 'planted'
   },
   journalEntries: [journalEntrySchema],
@@ -119,8 +135,15 @@ userGardenSchema.index({ user: 1, 'plant.category': 1 });
 userGardenSchema.index({ user: 1, status: 1 });
 userGardenSchema.index({ user: 1, addedDate: -1 });
 
-// Ensure one plant per user (no duplicates)
-userGardenSchema.index({ user: 1, 'plant.name': 1 }, { unique: true });
+// Ensure one active instance of a plant per user (no duplicates among active entries)
+// Use a partial index so inactive plants do not block re-adding the same plant
+userGardenSchema.index(
+  { user: 1, 'plant.name': 1 },
+  {
+    unique: true,
+    partialFilterExpression: { isActive: true }
+  }
+);
 
 module.exports = mongoose.model('UserGarden', userGardenSchema);
 

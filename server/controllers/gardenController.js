@@ -1,11 +1,11 @@
 const UserGarden = require('../models/UserGarden');
-const authenticateToken = require('../middleware/auth');
+const { protect } = require('../middlewares/auth');
 
 // Add plant to user's garden
 const addPlantToGarden = async (req, res) => {
   try {
     const { plant } = req.body;
-    const userId = req.user?.id;
+    const userId = req.user?._id || req.user?.id;
 
     if (!userId) {
       return res.status(401).json({
@@ -21,10 +21,17 @@ const addPlantToGarden = async (req, res) => {
       });
     }
 
-    // Check if plant already exists in user's garden
+    // Normalize plant name for consistent duplicate checks
+    const incomingName = (plant.name || plant.plantName || '').trim();
+    if (!incomingName) {
+      return res.status(400).json({ success: false, message: 'Plant name is required' });
+    }
+
+    // Check if an ACTIVE entry of the same plant already exists
     const existingPlant = await UserGarden.findOne({
       user: userId,
-      'plant.name': plant.name
+      isActive: true,
+      'plant.name': incomingName
     });
 
     if (existingPlant) {
@@ -35,8 +42,18 @@ const addPlantToGarden = async (req, res) => {
     }
 
     // Normalize plant fields to match schema if coming from dynamic Plant API
-    const normalizedPlant = plant.name ? plant : {
-      name: plant.plantName,
+    const normalizedPlant = plant.name ? {
+      name: incomingName,
+      category: plant.category || 'Herbs',
+      description: plant.description,
+      image: plant.image, // Use the image field directly from plant suggestion
+      growingTime: plant.growingTime || `${plant.daysToGrow || 60} days`,
+      sunlight: plant.sunlight,
+      space: plant.space,
+      difficulty: plant.difficulty || plant.maintenance || 'Easy',
+      price: plant.price || '—'
+    } : {
+      name: incomingName,
       category: 'Herbs',
       description: plant.description,
       image: plant.imageUrl,
@@ -56,7 +73,18 @@ const addPlantToGarden = async (req, res) => {
       currentGrowthStage: 'planted'
     });
 
-    await gardenEntry.save();
+    try {
+      await gardenEntry.save();
+    } catch (e) {
+      // Handle duplicate key errors from the unique partial index
+      if (e && e.code === 11000) {
+        return res.status(400).json({
+          success: false,
+          message: `${incomingName} is already in your garden!`
+        });
+      }
+      throw e;
+    }
 
     res.json({
       success: true,
@@ -77,7 +105,7 @@ const addPlantToGarden = async (req, res) => {
 // Get user's garden
 const getUserGarden = async (req, res) => {
   try {
-    const userId = req.user?.id;
+    const userId = req.user?._id || req.user?.id;
 
     if (!userId) {
       return res.status(401).json({
@@ -112,7 +140,7 @@ const addJournalEntry = async (req, res) => {
   try {
     const { plantId } = req.params;
     const { content, images, growthStage, notes } = req.body;
-    const userId = req.user?.id;
+    const userId = req.user?._id || req.user?.id;
 
     if (!userId) {
       return res.status(401).json({
@@ -177,7 +205,7 @@ const addJournalEntry = async (req, res) => {
 const getJournalEntries = async (req, res) => {
   try {
     const { plantId } = req.params;
-    const userId = req.user?.id;
+    const userId = req.user?._id || req.user?.id;
 
     if (!userId) {
       return res.status(401).json({
@@ -222,9 +250,12 @@ const updatePlantStatus = async (req, res) => {
   try {
     const { plantId } = req.params;
     const { status, currentGrowthStage, lastWatered, lastFertilized, notes } = req.body;
-    const userId = req.user?.id;
+    const userId = req.user?._id || req.user?.id;
+
+    console.log('Status update request:', { plantId, status, userId });
 
     if (!userId) {
+      console.log('No user ID found in request');
       return res.status(401).json({
         success: false,
         message: 'User authentication required'
@@ -237,7 +268,10 @@ const updatePlantStatus = async (req, res) => {
       isActive: true
     });
 
+    console.log('Found garden entry:', gardenEntry ? 'Yes' : 'No');
+
     if (!gardenEntry) {
+      console.log('Garden entry not found for plantId:', plantId, 'userId:', userId);
       return res.status(404).json({
         success: false,
         message: 'Plant not found in your garden'
@@ -245,13 +279,17 @@ const updatePlantStatus = async (req, res) => {
     }
 
     // Update fields if provided
-    if (status) gardenEntry.status = status;
+    if (status) {
+      console.log('Updating status from', gardenEntry.status, 'to', status);
+      gardenEntry.status = status;
+    }
     if (currentGrowthStage) gardenEntry.currentGrowthStage = currentGrowthStage;
     if (lastWatered) gardenEntry.lastWatered = new Date(lastWatered);
     if (lastFertilized) gardenEntry.lastFertilized = new Date(lastFertilized);
     if (notes) gardenEntry.notes = notes;
 
     await gardenEntry.save();
+    console.log('Garden entry saved successfully');
 
     res.json({
       success: true,
@@ -273,7 +311,7 @@ const updatePlantStatus = async (req, res) => {
 const removePlantFromGarden = async (req, res) => {
   try {
     const { plantId } = req.params;
-    const userId = req.user?.id;
+    const userId = req.user?._id || req.user?.id;
 
     if (!userId) {
       return res.status(401).json({

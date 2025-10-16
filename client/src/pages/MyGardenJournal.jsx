@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { FaLeaf, FaArrowLeft, FaPlus, FaCalendar, FaEdit, FaTrash, FaSave, FaTimes } from 'react-icons/fa';
+import { FaArrowLeft, FaPlus, FaCalendar, FaFilter, FaChevronDown, FaTrash } from 'react-icons/fa';
 
 const MyGardenJournal = () => {
   const { user } = useAuth();
@@ -9,13 +9,21 @@ const MyGardenJournal = () => {
   const [garden, setGarden] = useState([]);
   const [filteredGarden, setFilteredGarden] = useState([]);
   const [activeFilter, setActiveFilter] = useState('All');
-  const [selectedPlant, setSelectedPlant] = useState(null);
-  const [journalEntries, setJournalEntries] = useState([]);
-  const [newEntry, setNewEntry] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All');
   const [isLoading, setIsLoading] = useState(false);
-  const [showJournalModal, setShowJournalModal] = useState(false);
+  const [showStatusDropdown, setShowStatusDropdown] = useState({});
+  const [plantImages, setPlantImages] = useState({});
 
   const filters = ['All', 'Herbs', 'Fruits', 'Vegetables'];
+  const statusOptions = [
+    'All',
+    'Planted',
+    'Growing',
+    'First Harvest',
+    'Multiple Harvests',
+    'Completed',
+    'Failed'
+  ];
 
   // Load garden from database
   useEffect(() => {
@@ -26,7 +34,7 @@ const MyGardenJournal = () => {
       try {
         const response = await fetch('/api/garden', {
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
+            'Authorization': `Bearer ${localStorage.getItem('urbansprout_token')}`
           }
         });
         
@@ -82,12 +90,27 @@ const MyGardenJournal = () => {
     loadPlantImages();
   }, [user]);
 
-  // Filter plants based on selected filter
+  // Close dropdowns when clicking outside
   useEffect(() => {
-    if (activeFilter === 'All') {
-      setFilteredGarden(garden);
-    } else {
-      const filtered = garden.filter(plant => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest('.status-dropdown')) {
+        setShowStatusDropdown({});
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Filter plants based on selected filters
+  useEffect(() => {
+    let filtered = garden;
+
+    // Filter by category
+    if (activeFilter !== 'All') {
+      filtered = filtered.filter(plant => {
         if (typeof plant === 'string') {
           // Handle localStorage fallback
           const name = plant.toLowerCase();
@@ -112,89 +135,139 @@ const MyGardenJournal = () => {
           return plant.plant.category === activeFilter;
         }
       });
-      setFilteredGarden(filtered);
     }
-  }, [activeFilter, garden]);
 
-  const handlePlantClick = async (plant) => {
-    if (typeof plant === 'string') {
-      // Handle localStorage fallback
-      navigate(`/plant-detail/${encodeURIComponent(plant)}`);
-    } else {
-      // Handle database object - show journal modal
-      setSelectedPlant(plant);
-      setShowJournalModal(true);
+    // Filter by status
+    if (statusFilter !== 'All') {
+      filtered = filtered.filter(plant => {
+        const currentStatus = getPlantStatus(plant);
+        return currentStatus === statusFilter;
+      });
+    }
+
+    setFilteredGarden(filtered);
+  }, [activeFilter, statusFilter, garden]);
+
+  const handlePlantClick = (plant) => {
+    // No longer navigate to plant detail pages
+    // Plants are now managed directly on this page
+  };
+
+  const handleStatusChange = async (plant, newStatus) => {
+    try {
+      console.log('Status change initiated:', { plant, newStatus });
       
-      // Load journal entries
-      try {
-        const response = await fetch(`/api/garden/${plant._id}/journal`, {
+      if (typeof plant === 'string') {
+        // Handle localStorage fallback - update local status
+        const key = `plant_status_${user?.id || user?.uid || user?.email || 'guest'}`;
+        const existingStatuses = JSON.parse(localStorage.getItem(key) || '{}');
+        existingStatuses[plant] = newStatus;
+        localStorage.setItem(key, JSON.stringify(existingStatuses));
+        
+        // Update local state
+        setGarden(prev => prev.map(p => 
+          typeof p === 'string' && p === plant ? p : p
+        ));
+        
+        console.log('Updated localStorage status for:', plant, 'to:', newStatus);
+        alert(`Plant status updated to ${newStatus} successfully!`);
+      } else {
+        // Check if user is authenticated
+        if (!user) {
+          alert('Please log in to update plant status');
+          return;
+        }
+        
+        // Handle database object - map frontend status to database status
+        const statusToDbMap = {
+          'Planted': 'planted',
+          'Growing': 'growing',
+          'First Harvest': 'first_harvest',
+          'Multiple Harvests': 'multiple_harvests',
+          'Completed': 'completed',
+          'Failed': 'failed'
+        };
+        
+        const dbStatus = statusToDbMap[newStatus] || 'planted';
+        console.log('Mapping status:', newStatus, 'to database status:', dbStatus);
+        
+        const token = localStorage.getItem('urbansprout_token');
+        console.log('Auth token exists:', !!token);
+        console.log('User authenticated:', !!user);
+        
+        if (!token) {
+          alert('Authentication token not found. Please log in again.');
+          return;
+        }
+        
+        const response = await fetch(`/api/garden/${plant._id}/status`, {
+          method: 'PUT',
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            status: dbStatus
+          })
         });
+
+        console.log('API response status:', response.status);
         
         if (response.ok) {
           const data = await response.json();
+          console.log('API response data:', data);
+          
           if (data.success) {
-            setJournalEntries(data.journalEntries);
+            // Update local state with the database status
+            setGarden(prev => prev.map(p => 
+              p._id === plant._id ? { ...p, status: dbStatus } : p
+            ));
+            console.log('Successfully updated plant status in local state');
+            
+            // Show success message
+            alert(`Plant status updated to ${newStatus} successfully!`);
+          } else {
+            console.error('API returned success: false', data);
+            alert(`Failed to update status: ${data.message || 'Unknown error'}`);
+          }
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          console.error('API request failed:', response.status, errorData);
+          
+          if (response.status === 401) {
+            alert('Authentication failed. Please log in again.');
+            // Clear invalid token
+            localStorage.removeItem('urbansprout_token');
+            localStorage.removeItem('urbansprout_user');
+          } else {
+            alert(`Failed to update status: ${errorData.message || `HTTP ${response.status}`}`);
           }
         }
-      } catch (error) {
-        console.error('Error loading journal entries:', error);
       }
-    }
-  };
-
-  const handleAddJournalEntry = async () => {
-    if (!newEntry.trim() || !selectedPlant) return;
-
-    try {
-      const response = await fetch(`/api/garden/${selectedPlant._id}/journal`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          content: newEntry,
-          growthStage: 'growing'
-        })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          setJournalEntries(prev => [data.journalEntry, ...prev]);
-          setNewEntry('');
-        }
-      }
+      
+      // Close dropdown
+      setShowStatusDropdown(prev => ({ ...prev, [plant._id || plant]: false }));
     } catch (error) {
-      console.error('Error adding journal entry:', error);
+      console.error('Error updating plant status:', error);
+      alert(`Error updating plant status: ${error.message || 'Unknown error occurred'}`);
     }
   };
 
-  const closeJournalModal = () => {
-    setShowJournalModal(false);
-    setSelectedPlant(null);
-    setJournalEntries([]);
-    setNewEntry('');
+  const toggleStatusDropdown = (plant) => {
+    const plantId = typeof plant === 'string' ? plant : plant._id;
+    setShowStatusDropdown(prev => ({ ...prev, [plantId]: !prev[plantId] }));
   };
 
   const getPlantImage = (plant) => {
     if (typeof plant === 'string') {
       // Handle localStorage fallback
-      const sampleImages = {
-        'Sweet Basil': 'https://images.unsplash.com/photo-1615485290382-441e4d049cb5?w=300&h=200&fit=crop',
-        'Cherry Tomato': 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=300&h=200&fit=crop',
-        'Fresh Mint': 'https://images.unsplash.com/photo-1594736797933-d0401ba2fe65?w=300&h=200&fit=crop',
-        'Lettuce': 'https://images.unsplash.com/photo-1622206151226-18ca2c9ab4a1?w=300&h=200&fit=crop',
-        'Bell Pepper': 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=300&h=200&fit=crop',
-        'Strawberry': 'https://images.unsplash.com/photo-1464965911861-746a04b4bca6?w=300&h=200&fit=crop'
-      };
-      return sampleImages[plant] || 'https://via.placeholder.com/300x200/90EE90/FFFFFF?text=Plant+Image';
+      const mapped = plantImages && typeof plantImages === 'object' ? plantImages[plant] : undefined;
+      if (mapped) return mapped;
+      return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDMwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIzMDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjOTBFRTkwIi8+Cjx0ZXh0IHg9IjE1MCIgeT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTYiIGZpbGw9IiNGRkZGRkYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIwLjNlbSI+UGxhbnQgSW1hZ2U8L3RleHQ+Cjwvc3ZnPgo=';
     } else {
-      // Handle database object
-      return plant.plant.image || 'https://via.placeholder.com/300x200/90EE90/FFFFFF?text=Plant+Image';
+      // Handle database object - image is stored in plant.plant.image
+      const imageUrl = plant.plant?.image || plant.plant?.imageUrl;
+      return imageUrl || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDMwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIzMDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjOTBFRTkwIi8+Cjx0ZXh0IHg9IjE1MCIgeT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTYiIGZpbGw9IiNGRkZGRkYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIwLjNlbSI+UGxhbnQgSW1hZ2U8L3RleHQ+Cjwvc3ZnPgo=';
     }
   };
 
@@ -231,16 +304,80 @@ const MyGardenJournal = () => {
     }
   };
 
-  const getPlantStatus = (plantName) => {
-    // For now, return a random status. In a real app, this would come from plant data
-    const statuses = ['Growing', 'Planted', 'Harvested'];
-    return statuses[Math.floor(Math.random() * statuses.length)];
+  const getPlantStatus = (plant) => {
+    if (typeof plant === 'string') {
+      // Handle localStorage fallback
+      const key = `plant_status_${user?.id || user?.uid || user?.email || 'guest'}`;
+      const existingStatuses = JSON.parse(localStorage.getItem(key) || '{}');
+      return existingStatuses[plant] || 'Planted';
+    } else {
+      // Handle database object - map database status to frontend display status
+      const statusMap = {
+        'planted': 'Planted',
+        'growing': 'Growing',
+        'first_harvest': 'First Harvest',
+        'multiple_harvests': 'Multiple Harvests',
+        'completed': 'Completed',
+        'failed': 'Failed'
+      };
+      const dbStatus = plant.status || 'planted';
+      return statusMap[dbStatus] || 'Planted';
+    }
+  };
+
+  const handleRemovePlant = async (plant, e) => {
+    try {
+      if (e) e.stopPropagation();
+
+      const confirmDelete = window.confirm('Remove this plant from your garden?');
+      if (!confirmDelete) return;
+
+      // LocalStorage fallback: string entries
+      if (typeof plant === 'string') {
+        const userKey = user?.id || user?.uid || user?.email || 'guest';
+        const gardenKey = `my_garden_${userKey}`;
+
+        const savedGarden = JSON.parse(localStorage.getItem(gardenKey) || '[]');
+        const updatedGarden = savedGarden.filter((p) => p !== plant);
+        localStorage.setItem(gardenKey, JSON.stringify(updatedGarden));
+
+        setGarden((prev) => prev.filter((p) => p !== plant));
+        setFilteredGarden((prev) => prev.filter((p) => p !== plant));
+        return;
+      }
+
+      // Database object: call API
+      const response = await fetch(`/api/garden/${plant._id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('urbansprout_token')}`
+        }
+      });
+
+      if (response.ok) {
+        setGarden((prev) => prev.filter((p) => p._id !== plant._id));
+        setFilteredGarden((prev) => prev.filter((p) => p._id !== plant._id));
+      } else {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.message || 'Failed to remove plant');
+      }
+    } catch (error) {
+      console.error('Error removing plant from garden:', error);
+      alert(error.message || 'Unable to remove plant. Please try again.');
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-forest-green-50 via-cream-100 to-forest-green-100 relative overflow-hidden">
+      {/* Background decorative elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-forest-green-200 rounded-full opacity-20 animate-pulse"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-cream-300 rounded-full opacity-20 animate-pulse delay-1000"></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-forest-green-100 rounded-full opacity-10 animate-pulse delay-500"></div>
+      </div>
+      
       {/* Header */}
-      <div className="bg-white shadow-sm border-b">
+      <div className="bg-white/80 backdrop-blur-sm relative z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
@@ -251,19 +388,31 @@ const MyGardenJournal = () => {
                 <FaArrowLeft className="text-gray-600" />
               </button>
               <div className="flex items-center">
-                <FaLeaf className="text-green-600 text-2xl mr-3" />
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900">My Garden Journal</h1>
+                  <h1 className="text-2xl font-bold text-gray-900">My Garden</h1>
                   <p className="text-gray-600">Track your plants, progress, and memories</p>
                 </div>
               </div>
+            </div>
+            
+            {/* Status Filter */}
+            <div className="flex items-center space-x-4">
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="px-3 py-2 border border-forest-green-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-forest-green-500 bg-white/80 backdrop-blur-sm"
+              >
+                {statusOptions.map((status) => (
+                  <option key={status} value={status}>{status}</option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
         {/* Filter Options */}
         <div className="mb-8">
           <div className="flex flex-wrap gap-3">
@@ -273,7 +422,7 @@ const MyGardenJournal = () => {
                 onClick={() => setActiveFilter(filter)}
                 className={`px-6 py-2 rounded-full text-sm font-medium transition-colors ${
                   activeFilter === filter
-                    ? 'bg-green-600 text-white'
+                    ? 'bg-forest-green-700 text-white'
                     : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
                 }`}
               >
@@ -286,7 +435,7 @@ const MyGardenJournal = () => {
         {/* Plant Grid */}
         {filteredGarden.length === 0 ? (
           <div className="text-center py-16">
-            <FaLeaf className="text-6xl text-gray-300 mx-auto mb-4" />
+            <div className="text-6xl text-gray-300 mx-auto mb-4">🌱</div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">No plants found</h3>
             <p className="text-gray-600 mb-6">
               {activeFilter === 'All' 
@@ -296,7 +445,7 @@ const MyGardenJournal = () => {
             </p>
             <button
               onClick={() => navigate('/plant-suggestion')}
-              className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors"
+              className="bg-forest-green-700 text-white px-6 py-3 rounded-lg hover:bg-forest-green-800 transition-colors"
             >
               Find Plants
             </button>
@@ -307,7 +456,7 @@ const MyGardenJournal = () => {
               <div
                 key={typeof plant === 'string' ? plant : plant._id}
                 onClick={() => handlePlantClick(plant)}
-                className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow cursor-pointer overflow-hidden"
+                className="group bg-white/80 backdrop-blur-sm rounded-lg shadow-md hover:shadow-lg transition-shadow cursor-pointer overflow-hidden border border-white/20"
               >
                 {/* Plant Image */}
                 <div className="relative h-48 bg-gray-200">
@@ -316,20 +465,67 @@ const MyGardenJournal = () => {
                     alt={getPlantName(plant)}
                     className="w-full h-full object-cover"
                     onError={(e) => {
-                      e.target.src = 'https://via.placeholder.com/300x200/90EE90/FFFFFF?text=Plant+Image';
+                      e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDMwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIzMDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjOTBFRTkwIi8+Cjx0ZXh0IHg9IjE1MCIgeT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTYiIGZpbGw9IiNGRkZGRkYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIwLjNlbSI+UGxhbnQgSW1hZ2U8L3RleHQ+Cjwvc3ZnPgo=';
                     }}
                   />
-                  {/* Status Tag */}
+                  {/* Remove Button */}
+                  <div className="absolute top-3 left-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => handleRemovePlant(plant, e)}
+                      className="p-2 rounded-full bg-white/90 text-red-600 hover:bg-white shadow"
+                      title="Remove plant"
+                    >
+                      <FaTrash />
+                    </button>
+                  </div>
+                  {/* Status Dropdown */}
                   <div className="absolute top-3 right-3">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      getPlantStatus(getPlantName(plant)) === 'Growing' 
-                        ? 'bg-green-100 text-green-700'
-                        : getPlantStatus(getPlantName(plant)) === 'Planted'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'bg-gray-100 text-gray-700'
-                    }`}>
-                      {getPlantStatus(getPlantName(plant))}
-                    </span>
+                    <div className="relative status-dropdown">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleStatusDropdown(plant);
+                        }}
+                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                          getPlantStatus(plant) === 'Growing' 
+                            ? 'bg-forest-green-100 text-forest-green-700'
+                            : getPlantStatus(plant) === 'Planted'
+                            ? 'bg-blue-100 text-blue-700'
+                            : getPlantStatus(plant) === 'First Harvest'
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : getPlantStatus(plant) === 'Multiple Harvests'
+                            ? 'bg-orange-100 text-orange-700'
+                            : getPlantStatus(plant) === 'Completed'
+                            ? 'bg-green-100 text-green-700'
+                            : getPlantStatus(plant) === 'Failed'
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-gray-100 text-gray-700'
+                        }`}
+                      >
+                        {getPlantStatus(plant)}
+                        <FaChevronDown className="inline ml-1 text-xs" />
+                      </button>
+                      
+                      {/* Status Dropdown Menu */}
+                      {showStatusDropdown[typeof plant === 'string' ? plant : plant._id] && (
+                        <div className="absolute right-0 mt-1 w-40 bg-white/90 backdrop-blur-xl border border-white/20 rounded-lg shadow-lg z-20">
+                          {statusOptions.slice(1).map((status) => (
+                            <button
+                              key={status}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleStatusChange(plant, status);
+                              }}
+                              className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-50 transition-colors ${
+                                getPlantStatus(plant) === status ? 'bg-forest-green-50 text-forest-green-700' : 'text-gray-700'
+                              }`}
+                            >
+                              {status}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -352,87 +548,11 @@ const MyGardenJournal = () => {
       {/* Floating Action Button */}
       <button 
         onClick={() => navigate('/plant-suggestion')}
-        className="fixed bottom-6 right-6 bg-green-600 text-white w-14 h-14 rounded-full shadow-lg hover:bg-green-700 transition-colors flex items-center justify-center"
+        className="fixed bottom-6 right-6 bg-forest-green-700 text-white w-14 h-14 rounded-full shadow-lg hover:bg-forest-green-800 transition-colors flex items-center justify-center"
       >
         <FaPlus className="text-xl" />
       </button>
 
-      {/* Journal Modal */}
-      {showJournalModal && selectedPlant && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-hidden">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b">
-              <div className="flex items-center">
-                <img 
-                  src={getPlantImage(selectedPlant)} 
-                  alt={getPlantName(selectedPlant)}
-                  className="w-12 h-12 rounded-lg object-cover mr-4"
-                />
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-900">{getPlantName(selectedPlant)}</h2>
-                  <p className="text-sm text-gray-600">{getPlantDescription(selectedPlant)}</p>
-                </div>
-              </div>
-              <button 
-                onClick={closeJournalModal}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <FaTimes className="w-6 h-6" />
-              </button>
-            </div>
-
-            {/* Add New Entry */}
-            <div className="p-6 border-b">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Add Journal Entry</h3>
-              <div className="flex space-x-3">
-                <textarea
-                  value={newEntry}
-                  onChange={(e) => setNewEntry(e.target.value)}
-                  placeholder="How is your plant doing today? Share your observations..."
-                  className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
-                  rows="3"
-                />
-                <button
-                  onClick={handleAddJournalEntry}
-                  disabled={!newEntry.trim()}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center"
-                >
-                  <FaSave className="mr-2" />
-                  Save
-                </button>
-              </div>
-            </div>
-
-            {/* Journal Entries */}
-            <div className="p-6 max-h-96 overflow-y-auto">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Journal Entries</h3>
-              {journalEntries.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">No journal entries yet. Start documenting your plant's journey!</p>
-              ) : (
-                <div className="space-y-4">
-                  {journalEntries.map((entry, index) => (
-                    <div key={index} className="bg-gray-50 rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-gray-500">
-                          {new Date(entry.date).toLocaleDateString()}
-                        </span>
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
-                          {entry.growthStage}
-                        </span>
-                      </div>
-                      <p className="text-gray-800">{entry.content}</p>
-                      {entry.notes && (
-                        <p className="text-sm text-gray-600 mt-2 italic">Note: {entry.notes}</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

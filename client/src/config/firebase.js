@@ -1,6 +1,15 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut } from "firebase/auth";
+import {
+  initializeAuth,
+  browserLocalPersistence,
+  browserPopupRedirectResolver,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  signOut
+} from "firebase/auth";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -15,8 +24,11 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firebase Authentication and get a reference to the service
-export const auth = getAuth(app);
+// Initialize Firebase Authentication with explicit persistence and popup/redirect resolver
+export const auth = initializeAuth(app, {
+  persistence: browserLocalPersistence,
+  popupRedirectResolver: browserPopupRedirectResolver
+});
 
 // Google Auth Provider
 export const googleProvider = new GoogleAuthProvider();
@@ -35,6 +47,7 @@ export const signInWithGoogle = async () => {
     // If popup fails due to COOP or other issues, use redirect
     if (error.code === 'auth/popup-blocked' || 
         error.code === 'auth/popup-closed-by-user' ||
+        error.code === 'auth/network-request-failed' ||
         error.message.includes('Cross-Origin-Opener-Policy')) {
       
       // Use redirect method instead

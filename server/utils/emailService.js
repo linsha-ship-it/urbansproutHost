@@ -1,7 +1,33 @@
 const nodemailer = require('nodemailer');
 
-// Create email transporter
-const createTransporter = () => {
+// Alternative email service using Ethereal Email for development
+const createEtherealTransporter = async () => {
+  try {
+    // Create a test account with Ethereal Email
+    const testAccount = await nodemailer.createTestAccount();
+    
+    console.log('📧 Using Ethereal Email for development:', {
+      user: testAccount.user,
+      pass: testAccount.pass
+    });
+    
+    return nodemailer.createTransport({
+      host: 'smtp.ethereal.email',
+      port: 587,
+      secure: false,
+      auth: {
+        user: testAccount.user,
+        pass: testAccount.pass
+      }
+    });
+  } catch (error) {
+    console.error('Failed to create Ethereal transporter:', error);
+    return null;
+  }
+};
+
+// Create email transporter with fallback
+const createTransporter = async () => {
   // For development, we'll use Gmail SMTP
   // In production, you should use a proper email service like SendGrid, AWS SES, etc.
   
@@ -35,23 +61,45 @@ const createTransporter = () => {
     return null; // Return null to indicate simulation mode
   }
   
-  return nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // true for 465, false for other ports
-    auth: {
-      user: emailUser,
-      pass: cleanEmailPass
-    },
-    // Add additional options for better error handling
-    pool: true,
-    maxConnections: 1,
-    rateDelta: 20000,
-    rateLimit: 5,
-    tls: {
-      rejectUnauthorized: false
-    }
-  });
+  // Check for known invalid Gmail app passwords
+  if (emailUser === 'linshanadir16@gmail.com' && emailPass === 'rfmq suds kmkc kifv') {
+    console.log('⚠️  Using invalid Gmail credentials - trying Ethereal Email fallback');
+    return await createEtherealTransporter();
+  }
+  
+  // Check for new valid Gmail credentials
+  if (emailUser === 'linshanadir16@gmail.com' && emailPass === 'mmsw izay gipo pohy') {
+    console.log('✅ Using new Gmail credentials - attempting Gmail SMTP');
+    // Continue to Gmail SMTP setup below
+  }
+  
+  try {
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false, // true for 465, false for other ports
+      auth: {
+        user: emailUser,
+        pass: cleanEmailPass
+      },
+      // Add additional options for better error handling
+      pool: true,
+      maxConnections: 1,
+      rateDelta: 20000,
+      rateLimit: 5,
+      tls: {
+        rejectUnauthorized: false
+      }
+    });
+    
+    // Test the connection
+    await transporter.verify();
+    console.log('✅ Gmail SMTP connection verified');
+    return transporter;
+  } catch (error) {
+    console.log('❌ Gmail SMTP failed, trying Ethereal Email fallback:', error.message);
+    return await createEtherealTransporter();
+  }
 };
 
 // Format amounts in INR for emails
@@ -71,7 +119,7 @@ const formatINR = (amount) => {
 // Send password reset email
 const sendPasswordResetEmail = async (email, resetUrl, userName = 'User') => {
   try {
-    const transporter = createTransporter();
+    const transporter = await createTransporter();
     
     // If transporter is null, it means we're in simulation mode
     if (!transporter) {
@@ -193,7 +241,7 @@ const sendPasswordResetEmail = async (email, resetUrl, userName = 'User') => {
 // Send welcome email (optional)
 const sendWelcomeEmail = async (email, userName = 'User') => {
   try {
-    const transporter = createTransporter();
+    const transporter = await createTransporter();
     
     // If transporter is null, it means we're in simulation mode
     if (!transporter) {
@@ -276,7 +324,7 @@ const sendWelcomeEmail = async (email, userName = 'User') => {
 // Send user registration confirmation email
 const sendRegistrationEmail = async (email, userName, userRole = 'beginner') => {
   try {
-    const transporter = createTransporter();
+    const transporter = await createTransporter();
     
     // If transporter is null, it means we're in simulation mode
     if (!transporter) {
@@ -431,7 +479,7 @@ const sendBlogRejectionEmail = async (email, userName, blogTitle, rejectionReaso
       passStartsWith: emailPass.substring(0, 4) + '...'
     });
 
-    const transporter = createTransporter();
+    const transporter = await createTransporter();
     
     // If transporter is null, it means we're in simulation mode
     if (!transporter) {
@@ -572,7 +620,7 @@ const sendBlogRejectionEmail = async (email, userName, blogTitle, rejectionReaso
 // Send blog post approval email
 const sendBlogApprovalEmail = async (email, userName, blogTitle) => {
   try {
-    const transporter = createTransporter();
+    const transporter = await createTransporter();
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -680,7 +728,7 @@ const sendBlogApprovalEmail = async (email, userName, blogTitle) => {
 // Send order confirmation email
 const sendOrderConfirmationEmail = async (email, userName, orderDetails) => {
   try {
-    const transporter = createTransporter();
+    const transporter = await createTransporter();
     
     // If transporter is null, it means we're in simulation mode
     if (!transporter) {
@@ -852,7 +900,14 @@ const sendOrderConfirmationEmail = async (email, userName, orderDetails) => {
 // Send payment confirmation email
 const sendPaymentConfirmationEmail = async (email, userName, paymentDetails) => {
   try {
-    const transporter = createTransporter();
+    const transporter = await createTransporter();
+    
+    // If transporter is null, it means we're in simulation mode
+    if (!transporter) {
+      console.log('📧 Email simulation mode - payment confirmation email would be sent to:', email);
+      console.log('📧 Order details:', paymentDetails);
+      return { success: true, messageId: 'simulated-' + Date.now() };
+    }
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -1000,7 +1055,7 @@ const sendEmailNotification = async (email, subject, message, userName = 'User')
       return { success: true, messageId: 'simulated-' + Date.now() };
     }
 
-    const transporter = createTransporter();
+    const transporter = await createTransporter();
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -1047,6 +1102,13 @@ const sendEmailNotification = async (email, subject, message, userName = 'User')
 
     const result = await transporter.sendMail(mailOptions);
     console.log(`Email sent successfully to ${email}:`, result.messageId);
+    
+    // If using Ethereal Email, log the preview URL
+    if (result.messageId && result.messageId.includes('@ethereal.email')) {
+      const previewUrl = nodemailer.getTestMessageUrl(result);
+      console.log('📧 Preview URL:', previewUrl);
+    }
+    
     return { success: true, messageId: result.messageId };
   } catch (error) {
     console.error('Error sending email notification:', error);
@@ -1059,7 +1121,7 @@ const sendEmailNotification = async (email, subject, message, userName = 'User')
 // Send order status update email
 const sendOrderStatusUpdateEmail = async (email, userName, orderDetails) => {
   try {
-    const transporter = createTransporter();
+    const transporter = await createTransporter();
     
     // If transporter is null, it means we're in simulation mode
     if (!transporter) {
@@ -1251,7 +1313,7 @@ const sendOrderStatusUpdateEmail = async (email, userName, orderDetails) => {
 // Send admin verification email
 const sendAdminVerificationEmail = async (email, userName, verificationType, details) => {
   try {
-    const transporter = createTransporter();
+    const transporter = await createTransporter();
 
     const verificationTypes = {
       'user': {

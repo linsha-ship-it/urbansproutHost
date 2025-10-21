@@ -12,12 +12,33 @@ const Wishlist = require('../models/Wishlist');
 // @route   POST /api/auth/register
 // @access  Public
 const register = asyncHandler(async (req, res, next) => {
-  const { name, email, password, role = 'beginner', professionalId } = req.body;
+  const { name, username, email, password, role = 'beginner', professionalId } = req.body;
 
-  // Check if user already exists
-  const existingUser = await User.findOne({ email: email.toLowerCase() });
-  if (existingUser) {
+  // Validate required fields
+  if (!email) {
+    return next(new AppError('Email is required', 400));
+  }
+
+  if (!name) {
+    return next(new AppError('Name is required', 400));
+  }
+
+  if (!password) {
+    return next(new AppError('Password is required', 400));
+  }
+
+  // Check if user already exists by email
+  const existingUserByEmail = await User.findOne({ email: email.toLowerCase() });
+  if (existingUserByEmail) {
     return next(new AppError('User with this email already exists', 400));
+  }
+
+  // Check if username already exists (only if username is provided)
+  if (username) {
+    const existingUserByUsername = await User.findOne({ username: username.toLowerCase() });
+    if (existingUserByUsername) {
+      return next(new AppError('Username already taken', 400));
+    }
   }
 
   // Check if professional ID already exists (for experts and vendors)
@@ -35,6 +56,11 @@ const register = asyncHandler(async (req, res, next) => {
     password,
     role
   };
+
+  // Add username only if provided
+  if (username) {
+    userData.username = username.toLowerCase().trim();
+  }
 
   // Add professional ID if provided
   if (professionalId && (role === 'expert' || role === 'vendor')) {
@@ -101,6 +127,15 @@ const register = asyncHandler(async (req, res, next) => {
 // @access  Public
 const login = asyncHandler(async (req, res, next) => {
   const { email, password } = req.body;
+
+  // Validate required fields
+  if (!email) {
+    return next(new AppError('Email is required', 400));
+  }
+
+  if (!password) {
+    return next(new AppError('Password is required', 400));
+  }
 
   // First check Admin collection
   let admin = await Admin.findOne({ email: email.toLowerCase() }).select('+password');
@@ -349,6 +384,11 @@ const googleSignIn = asyncHandler(async (req, res, next) => {
 
   if (!uid || !email) {
     return next(new AppError('Google authentication data is incomplete', 400));
+  }
+
+  // Validate required fields
+  if (!email) {
+    return next(new AppError('Email is required', 400));
   }
 
   // Enforce admin role for specific emails

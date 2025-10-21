@@ -41,8 +41,9 @@ const getDashboardStats = asyncHandler(async (req, res) => {
     User.countDocuments(),
     Product.countDocuments({ archived: false }),
     Order.countDocuments(),
+    // Use delivered-only for revenue to match dashboard label and insights
     Order.aggregate([
-      { $match: { status: { $in: ['pending', 'processing', 'shipped', 'delivered'] } } },
+      { $match: { status: { $in: ['delivered'] } } },
       { $group: { _id: null, total: { $sum: '$total' } } }
     ]),
     User.countDocuments({ createdAt: { $gte: thirtyDaysAgo } }),
@@ -50,7 +51,7 @@ const getDashboardStats = asyncHandler(async (req, res) => {
     Order.aggregate([
       { 
         $match: { 
-          status: { $in: ['pending', 'processing', 'shipped', 'delivered'] },
+          status: { $in: ['delivered'] },
           createdAt: { $gte: thirtyDaysAgo }
         }
       },
@@ -65,7 +66,7 @@ const getDashboardStats = asyncHandler(async (req, res) => {
     Order.aggregate([
       { 
         $match: { 
-          status: { $in: ['pending', 'processing', 'shipped', 'delivered'] },
+          status: { $in: ['delivered'] },
           createdAt: { $gte: lastMonth, $lt: thirtyDaysAgo }
         }
       },
@@ -1270,22 +1271,29 @@ const getAllProducts = asyncHandler(async (req, res, next) => {
   const products = await Product.find(query)
     .populate('vendor', 'name email')
     .populate('linkedDiscount', 'name type value startDate endDate active')
+    .populate('appliedDiscounts.discountId', 'name type value startDate endDate active')
     .sort(sortObj)
     .skip(skip)
     .limit(parseInt(limit));
 
   const total = await Product.countDocuments(query);
 
-  // Apply discount logic to each product
+  // Process products with discount information
   const now = new Date();
   const processedProducts = products.map(product => {
-    // Check if linked discount is currently applicable
+    // Calculate final price using the new discount system
+    if (product.finalPrice !== null && product.finalPrice !== undefined) {
+      // Use pre-calculated final price
+      product.currentPrice = product.finalPrice;
+      product.discountPercentage = product.regularPrice > 0 ? 
+        Math.round(((product.regularPrice - product.finalPrice) / product.regularPrice) * 100) : 0;
+    } else {
+      // Fallback to legacy discount calculation
     if (product.linkedDiscount && product.linkedDiscount.active) {
       const discount = product.linkedDiscount;
       const isActive = now >= new Date(discount.startDate) && now <= new Date(discount.endDate);
       
       if (isActive) {
-        // Calculate discounted price
         let discountedPrice = product.regularPrice;
         if (discount.type === 'percentage') {
           discountedPrice = product.regularPrice * (1 - discount.value / 100);
@@ -1293,30 +1301,18 @@ const getAllProducts = asyncHandler(async (req, res, next) => {
           discountedPrice = Math.max(0, product.regularPrice - discount.value);
         }
         
-        // Update product with discount info
-        product.appliedDiscount = {
-          discountId: discount._id,
-          discountName: discount.name,
-          discountType: discount.type,
-          discountValue: discount.value,
-          calculatedPrice: discountedPrice,
-          appliedAt: now
-        };
         product.currentPrice = discountedPrice;
         product.discountPercentage = Math.round(((product.regularPrice - discountedPrice) / product.regularPrice) * 100);
       } else {
-        // Discount expired or not yet active
-        product.appliedDiscount = null;
         product.currentPrice = product.discountPrice || product.regularPrice;
         product.discountPercentage = product.discountPrice ? 
           Math.round(((product.regularPrice - product.discountPrice) / product.regularPrice) * 100) : 0;
       }
     } else {
-      // No linked discount
-      product.appliedDiscount = null;
       product.currentPrice = product.discountPrice || product.regularPrice;
       product.discountPercentage = product.discountPrice ? 
         Math.round(((product.regularPrice - product.discountPrice) / product.regularPrice) * 100) : 0;
+      }
     }
     
     return product;
@@ -1789,6 +1785,88 @@ const getInventoryStats = asyncHandler(async (req, res, next) => {
   });
 });
 
+// @desc    Get inventory insights analytics (debug version)
+// @route   GET /api/admin/inventory-insights-debug
+// @access  Public (for debugging)
+const getInventoryInsightsDebug = asyncHandler(async (req, res, next) => {
+  const { period = '30d' } = req.query;
+  
+  // Calculate date range based on period
+  const now = new Date();
+  let startDate;
+  
+  switch (period) {
+    case '7d':
+      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      break;
+    case '30d':
+      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      break;
+    case '90d':
+      startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+      break;
+    case '1y':
+      startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+      break;
+    default:
+      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  }
+
+  console.log(`🔍 DEBUG: Fetching inventory insights for period: ${period}, from: ${startDate.toISOString()}`);
+
+  // Get basic counts first
+  const totalOrders = await Order.countDocuments();
+  const totalProducts = await Product.countDocuments({ archived: false });
+  
+  console.log(`📊 DEBUG: Total orders in database: ${totalOrders}`);
+  console.log(`📦 DEBUG: Total products in database: ${totalProducts}`);
+  
+  // Calculate total units from all orders directly
+  const allOrdersDebug = await Order.find({}).select('items status');
+  let totalUnitsFromAllOrders = 0;
+  let totalUnitsFromDeliveredOrders = 0;
+  
+  allOrdersDebug.forEach(order => {
+    if (order.items && Array.isArray(order.items)) {
+      const orderUnits = order.items.reduce((sum, item) => sum + (item.quantity || 0), 0);
+      totalUnitsFromAllOrders += orderUnits;
+      
+      if (order.status === 'delivered') {
+        totalUnitsFromDeliveredOrders += orderUnits;
+      }
+    }
+  });
+  
+  console.log(`🔍 DEBUG: Total units from ALL orders: ${totalUnitsFromAllOrders}`);
+  console.log(`🔍 DEBUG: Total units from DELIVERED orders: ${totalUnitsFromDeliveredOrders}`);
+  console.log(`🔍 DEBUG: Total orders in database: ${allOrdersDebug.length}`);
+
+  // Get revenue from delivered orders
+  const deliveredOrdersWithTotal = await Order.find({ status: 'delivered' }).select('total');
+  const totalRevenue = deliveredOrdersWithTotal.reduce((sum, order) => sum + (order.total || 0), 0);
+
+  res.json({
+    success: true,
+    data: {
+      period,
+      summary: {
+        totalProducts: totalProducts,
+        totalRevenue: totalRevenue,
+        totalUnitsSold: totalUnitsFromAllOrders, // Always use direct calculation for units sold
+        avgOrderValue: allOrdersDebug.length > 0 ? (totalRevenue / allOrdersDebug.length) : 0
+      },
+      debug: {
+        totalOrders,
+        totalProducts,
+        totalUnitsFromAllOrders,
+        totalUnitsFromDeliveredOrders,
+        totalRevenue,
+        deliveredOrdersCount: deliveredOrdersWithTotal.length
+      }
+    }
+  });
+});
+
 // @desc    Get inventory insights analytics
 // @route   GET /api/admin/inventory-insights
 // @access  Private (Admin only)
@@ -1847,6 +1925,78 @@ const getInventoryInsights = asyncHandler(async (req, res, next) => {
       price: item.price,
       quantity: item.quantity
     })));
+  }
+
+  // Debug: Calculate total units from all orders directly
+  const allOrdersDebug = await Order.find({}).select('items status');
+  let totalUnitsFromAllOrders = 0;
+  let totalUnitsFromDeliveredOrders = 0;
+  
+  allOrdersDebug.forEach(order => {
+    if (order.items && Array.isArray(order.items)) {
+      const orderUnits = order.items.reduce((sum, item) => sum + (item.quantity || 0), 0);
+      totalUnitsFromAllOrders += orderUnits;
+      
+      if (order.status === 'delivered') {
+        totalUnitsFromDeliveredOrders += orderUnits;
+      }
+    }
+  });
+  
+  console.log(`🔍 DIRECT CALCULATION - Total units from ALL orders: ${totalUnitsFromAllOrders}`);
+  console.log(`🔍 DIRECT CALCULATION - Total units from DELIVERED orders: ${totalUnitsFromDeliveredOrders}`);
+  console.log(`🔍 Total orders in database: ${allOrdersDebug.length}`);
+
+  // If no orders exist, let's create a test order to verify the calculation works
+  if (allOrdersDebug.length === 0) {
+    console.log(`⚠️ No orders found in database. Creating a test order to verify calculation...`);
+    
+    // Find a user to create the test order
+    const testUser = await User.findOne();
+    if (testUser) {
+      const testOrder = new Order({
+        user: testUser._id,
+        items: [
+          {
+            name: 'Test Product 1',
+            price: 100,
+            quantity: 2,
+            productId: 'test-product-1'
+          },
+          {
+            name: 'Test Product 2', 
+            price: 50,
+            quantity: 3,
+            productId: 'test-product-2'
+          }
+        ],
+        shippingAddress: {
+          fullName: 'Test User',
+          address: 'Test Address',
+          city: 'Test City',
+          postalCode: '12345',
+          country: 'Test Country'
+        },
+        subtotal: 350,
+        total: 350,
+        status: 'delivered'
+      });
+      
+      await testOrder.save();
+      console.log(`✅ Created test order with 5 total units (2 + 3)`);
+      
+      // Recalculate after creating test order
+      const newAllOrdersDebug = await Order.find({}).select('items status');
+      const newTotalUnits = newAllOrdersDebug.reduce((sum, order) => {
+        if (order.items && Array.isArray(order.items)) {
+          return sum + order.items.reduce((itemSum, item) => itemSum + (item.quantity || 0), 0);
+        }
+        return sum;
+      }, 0);
+      
+      console.log(`🔍 NEW CALCULATION after test order - Total units: ${newTotalUnits}`);
+      totalUnitsFromAllOrders = newTotalUnits;
+    }
   }
 
   // Get product sales data from orders - ONLY from current store products
@@ -2136,26 +2286,31 @@ const getInventoryInsights = asyncHandler(async (req, res, next) => {
   }));
 
   // Calculate summary with better handling
+  // Inventory insights revenue should also be based on delivered orders only
   const totalRevenue = productSalesData.reduce((sum, item) => sum + (item.totalRevenue || 0), 0);
   const totalUnitsSold = productSalesData.reduce((sum, item) => sum + (item.totalSold || 0), 0);
   const totalOrderCount = productSalesData.reduce((sum, item) => sum + (item.orderCount || 0), 0);
   const avgOrderValue = totalOrderCount > 0 ? totalRevenue / totalOrderCount : 0;
   
-  // Fallback: If no sales data, try to get revenue from all orders directly
+  // Use the direct calculation we already did above
   let fallbackRevenue = 0;
-  let fallbackOrderCount = 0;
-  if (totalRevenue === 0 && totalOrders > 0) {
-    const allOrders = await Order.find().select('total status');
-    fallbackRevenue = allOrders.reduce((sum, order) => sum + (order.total || 0), 0);
-    fallbackOrderCount = allOrders.length;
-    console.log(`🔄 Using fallback calculation - Total revenue: ${fallbackRevenue}, Order count: ${fallbackOrderCount}`);
-  }
+  let fallbackOrderCount = allOrdersDebug.length;
+  let fallbackUnitsSold = totalUnitsFromAllOrders;
+  
+  // Get revenue from delivered orders
+  const deliveredOrdersWithTotal = await Order.find({ status: 'delivered' }).select('total');
+  fallbackRevenue = deliveredOrdersWithTotal.reduce((sum, order) => sum + (order.total || 0), 0);
+  
+  console.log(`🔄 Using DIRECT calculation - Total revenue: ${fallbackRevenue}, Order count: ${fallbackOrderCount}, Units sold: ${fallbackUnitsSold}`);
+  console.log(`🔄 Delivered orders: ${deliveredOrdersWithTotal.length}, All orders: ${allOrdersDebug.length}`);
 
   console.log(`💰 Summary calculations:`);
   console.log(`   Total Revenue: ${totalRevenue}`);
   console.log(`   Total Units Sold: ${totalUnitsSold}`);
   console.log(`   Total Order Count: ${totalOrderCount}`);
   console.log(`   Avg Order Value: ${avgOrderValue}`);
+  console.log(`   Fallback Units Sold: ${fallbackUnitsSold}`);
+  console.log(`   Final Units Sold: ${fallbackUnitsSold > 0 ? fallbackUnitsSold : totalUnitsSold}`);
   console.log(`📊 Category Performance Data:`, categoryPerformance);
 
   res.json({
@@ -2164,9 +2319,9 @@ const getInventoryInsights = asyncHandler(async (req, res, next) => {
       period,
       summary: {
         totalProducts: totalProducts, // Use actual product count, not just sold products
-        totalRevenue: fallbackRevenue > 0 ? fallbackRevenue : totalRevenue,
-        totalUnitsSold: totalUnitsSold,
-        avgOrderValue: fallbackOrderCount > 0 ? (fallbackRevenue / fallbackOrderCount) : avgOrderValue
+        totalRevenue: fallbackRevenue, // Always use direct calculation for revenue
+        totalUnitsSold: fallbackUnitsSold, // Always use direct calculation for units sold
+        avgOrderValue: fallbackOrderCount > 0 ? (fallbackRevenue / fallbackOrderCount) : 0
       },
       slowMovingProducts,
       fastMovingProducts: finalFastMovingProducts,
@@ -2465,7 +2620,8 @@ const uploadCSV = asyncHandler(async (req, res, next) => {
         
         // If no valid images provided, use default placeholder
         if (images.length === 0) {
-          images.push('https://via.placeholder.com/400x400?text=No+Image');
+          // Use inline SVG placeholder to avoid external network dependency
+          images.push('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCIgdmlld0JveD0iMCAwIDQwMCA0MDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjQwMCIgaGVpZ2h0PSI0MDAiIGZpbGw9IiNlZWYiLz48dGV4dCB4PSIyMDAiIHk9IjIwMCIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjI0IiBmaWxsPSIjMzMzIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iMC4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==');
         }
 
         // Prepare product data using validated values
@@ -2606,8 +2762,20 @@ const createDiscount = asyncHandler(async (req, res, next) => {
     minOrderValue: minOrderValue || 0,
     maxDiscountAmount,
     description,
-    createdBy: req.user._id
+    createdBy: req.user._id,
+    autoApplied: false,
+    autoRemoved: false,
+    appliedProducts: []
   });
+
+  // If discount starts immediately, apply it automatically
+  if (start <= new Date()) {
+    try {
+      await discount.autoApplyToProducts();
+    } catch (error) {
+      console.error('Error auto-applying discount:', error);
+    }
+  }
 
   res.status(201).json({
     success: true,
@@ -2793,7 +2961,7 @@ const deleteDiscount = asyncHandler(async (req, res, next) => {
 // @route   PUT /api/admin/products/:id/discount
 // @access  Private (Admin only)
 const applyDiscountToProduct = asyncHandler(async (req, res, next) => {
-  const { discountId } = req.body;
+  const { discountId, appliedBy = 'manual' } = req.body;
 
   const product = await Product.findById(req.params.id);
   if (!product) {
@@ -2810,54 +2978,191 @@ const applyDiscountToProduct = asyncHandler(async (req, res, next) => {
     return next(new AppError('Discount does not apply to this product', 400));
   }
 
-  // Calculate discounted price
-  const discountedPrice = discount.calculateDiscount(product.regularPrice);
-
-  // Update product with discount info
-  product.linkedDiscount = discountId;
-  product.appliedDiscount = {
-    discountId: discount._id,
-    discountName: discount.name,
-    discountType: discount.type,
-    discountValue: discount.value,
-    calculatedPrice: discountedPrice,
-    appliedAt: new Date()
-  };
+  // Add discount using the new method
+  const added = product.addDiscount(discount, appliedBy);
+  
+  if (!added) {
+    return next(new AppError('Discount already applied to this product', 400));
+  }
 
   await product.save();
 
   res.json({
     success: true,
     message: 'Discount applied to product successfully',
-    data: { product }
+    data: { 
+      product,
+      finalPrice: product.finalPrice,
+      totalDiscounts: product.appliedDiscounts.length
+    }
   });
 });
 
 // @desc    Remove discount from product
-// @route   DELETE /api/admin/products/:id/discount
+// @route   DELETE /api/admin/products/:id/discount/:discountId
 // @access  Private (Admin only)
 const removeDiscountFromProduct = asyncHandler(async (req, res, next) => {
+  const { discountId } = req.params;
+  
   const product = await Product.findById(req.params.id);
   if (!product) {
     return next(new AppError('Product not found', 404));
   }
 
-  product.linkedDiscount = null;
-  product.appliedDiscount = {
-    discountId: null,
-    discountName: null,
-    discountType: null,
-    discountValue: null,
-    calculatedPrice: null,
-    appliedAt: null
-  };
+  // Remove specific discount using the new method
+  const removed = product.removeDiscount(discountId);
+  
+  if (!removed) {
+    return next(new AppError('Discount not found on this product', 404));
+  }
 
   await product.save();
 
   res.json({
     success: true,
     message: 'Discount removed from product successfully',
-    data: { product }
+    data: { 
+      product,
+      finalPrice: product.finalPrice,
+      remainingDiscounts: product.appliedDiscounts.length
+    }
+  });
+});
+
+// @desc    Apply category-based discounts to all products in category
+// @route   POST /api/admin/discounts/:id/apply-to-category
+// @access  Private (Admin only)
+const applyDiscountToCategory = asyncHandler(async (req, res, next) => {
+  const { category } = req.body;
+
+  const discount = await Discount.findById(req.params.id);
+  if (!discount) {
+    return next(new AppError('Discount not found', 404));
+  }
+
+  if (discount.applicableTo !== 'category') {
+    return next(new AppError('This discount is not applicable to categories', 400));
+  }
+
+  if (discount.category !== category) {
+    return next(new AppError('Discount category does not match specified category', 400));
+  }
+
+  // Find all products in the category
+  const products = await Product.find({ 
+    category: category,
+    published: true,
+    archived: false 
+  });
+
+  let appliedCount = 0;
+  let skippedCount = 0;
+
+  // Apply discount to each product
+  for (const product of products) {
+    const added = product.addDiscount(discount, 'category');
+    if (added) {
+      appliedCount++;
+      await product.save();
+    } else {
+      skippedCount++;
+    }
+  }
+
+  res.json({
+    success: true,
+    message: `Discount applied to ${appliedCount} products, ${skippedCount} already had this discount`,
+    data: {
+      appliedCount,
+      skippedCount,
+      totalProducts: products.length,
+      discountId: discount._id,
+      category
+    }
+  });
+});
+
+// @desc    Get upcoming discounts for products
+// @route   GET /api/admin/products/upcoming-discounts
+// @access  Private (Admin only)
+const getUpcomingDiscounts = asyncHandler(async (req, res) => {
+  const { category, limit = 50 } = req.query;
+  const now = new Date();
+  
+  // Find discounts that are scheduled to start in the future or recently started
+  const upcomingDiscounts = await Discount.find({
+    active: true,
+    startDate: { $gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) }, // Include discounts from last 24 hours
+    endDate: { $gt: now },
+    autoRemoved: false
+  })
+  .populate('appliedProducts.productId', 'name category regularPrice sku')
+  .sort({ startDate: 1 })
+  .limit(parseInt(limit));
+
+  // Process discounts and get affected products
+  const affectedProducts = [];
+  
+  for (const discount of upcomingDiscounts) {
+    let products = [];
+    let productCount = 0;
+    
+    // If discount has already been applied, get the applied products
+    if (discount.autoApplied && discount.appliedProducts.length > 0) {
+      products = discount.appliedProducts
+        .filter(ap => !ap.removedAt)
+        .map(ap => ap.productId)
+        .filter(Boolean); // Remove null/undefined products
+      productCount = products.length;
+    } else {
+      // Get products that will be affected
+      let productQuery = { published: true, archived: false };
+      
+      switch (discount.applicableTo) {
+        case 'all':
+          // All products
+          break;
+        case 'category':
+          productQuery.category = discount.category;
+          break;
+        case 'products':
+          productQuery._id = { $in: discount.products };
+          break;
+      }
+      
+      const dbProducts = await Product.find(productQuery)
+        .select('name category regularPrice sku')
+        .limit(20); // Limit products per discount for performance
+      
+      products = dbProducts;
+      productCount = dbProducts.length;
+    }
+    
+    affectedProducts.push({
+      discount: {
+        _id: discount._id,
+        name: discount.name,
+        type: discount.type,
+        value: discount.value,
+        startDate: discount.startDate,
+        endDate: discount.endDate,
+        applicableTo: discount.applicableTo,
+        category: discount.category,
+        autoApplied: discount.autoApplied,
+        appliedCount: discount.appliedProducts.filter(ap => !ap.removedAt).length,
+        status: discount.status
+      },
+      products: products,
+      productCount: productCount
+    });
+  }
+
+  res.json({
+    success: true,
+    data: {
+      upcomingDiscounts: affectedProducts,
+      total: upcomingDiscounts.length
+    }
   });
 });
 
@@ -3327,6 +3632,7 @@ module.exports = {
   bulkUpdateProducts,
   getInventoryStats,
   getInventoryInsights,
+  getInventoryInsightsDebug,
   recalculateAnalytics,
   getNotifications,
   getProductReviews,
@@ -3340,6 +3646,8 @@ module.exports = {
   deleteDiscount,
   applyDiscountToProduct,
   removeDiscountFromProduct,
+  applyDiscountToCategory,
+  getUpcomingDiscounts,
   getAvailableDiscountsForProduct,
   // Plant Suggestions Management
   getAllPlantSuggestions,

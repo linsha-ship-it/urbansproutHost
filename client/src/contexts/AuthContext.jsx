@@ -38,7 +38,7 @@ export const AuthProvider = ({ children }) => {
           
           // Validate token by making a test API call
           try {
-            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api'}/auth/profile`, {
+            const response = await fetch(`http://localhost:5002/api/auth/profile`, {
               headers: {
                 'Authorization': `Bearer ${savedToken}`,
                 'Content-Type': 'application/json'
@@ -113,7 +113,34 @@ export const AuthProvider = ({ children }) => {
   const updateProfile = (updatedData) => {
     const updatedUser = { ...user, ...updatedData };
     setUser(updatedUser);
-    localStorage.setItem('urbansprout_user', JSON.stringify(updatedUser));
+    
+    // Store user data with avatar URL (not base64 data)
+    const userDataForStorage = {
+      id: updatedUser.id,
+      name: updatedUser.name,
+      email: updatedUser.email,
+      role: updatedUser.role,
+      preferences: updatedUser.preferences,
+      displayName: updatedUser.displayName,
+      avatar: updatedUser.avatar, // Store URL, not base64
+      hasProfilePhoto: updatedUser.hasProfilePhoto
+    };
+    
+    try {
+      localStorage.setItem('urbansprout_user', JSON.stringify(userDataForStorage));
+    } catch (error) {
+      console.error('Failed to save user data to localStorage:', error);
+      // Clear old data and try again with minimal data
+      localStorage.removeItem('urbansprout_user');
+      const minimalUserData = {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        role: updatedUser.role
+      };
+      localStorage.setItem('urbansprout_user', JSON.stringify(minimalUserData));
+    }
+    
     return updatedUser;
   };
 

@@ -54,30 +54,46 @@ const Avatar = ({
   }
 
   const userName = user?.name || user?.displayName || 'User'
-  const userPhoto = user?.photoURL || user?.profilePhoto
+  const userPhoto = user?.photoURL || user?.profilePhoto || user?.avatar
   const initials = getInitials(userName)
   const avatarColor = getAvatarColor(userName)
   
   const borderClass = showBorder ? 'ring-2 ring-white ring-offset-2' : ''
 
+  // Check if the photo is a database URL (starts with /api/profile-photo/)
+  const isDatabaseUrl = userPhoto && userPhoto.startsWith('/api/profile-photo/')
+  const photoUrl = isDatabaseUrl ? `http://localhost:5002${userPhoto}` : userPhoto
+
   if (userPhoto) {
     return (
-      <img
-        src={userPhoto}
-        alt={userName}
-        className={`${sizeClasses[size]} rounded-full object-cover ${borderClass} ${className}`}
-        onError={(e) => {
-          // Fallback to initials if image fails to load
-          e.target.style.display = 'none'
-          e.target.nextSibling.style.display = 'flex'
-        }}
-      />
+      <div className={`relative inline-block ${className}`}>
+        <img
+          src={photoUrl}
+          alt={userName}
+          className={`${sizeClasses[size]} rounded-full object-cover ${borderClass} block`}
+          onError={(e) => {
+            // Hide the image and show fallback
+            e.target.style.display = 'none'
+            const fallback = e.target.parentElement.querySelector('.avatar-fallback')
+            if (fallback) {
+              fallback.style.display = 'flex'
+            }
+          }}
+        />
+        {/* Fallback avatar (hidden by default) */}
+        <div 
+          className={`avatar-fallback ${sizeClasses[size]} rounded-full ${avatarColor} ${borderClass} flex items-center justify-center text-white font-semibold`}
+          style={{ display: 'none' }}
+        >
+          {initials}
+        </div>
+      </div>
     )
   }
 
   return (
     <div
-      className={`${sizeClasses[size]} rounded-full ${avatarColor} ${borderClass} ${className} flex items-center justify-center text-white font-semibold`}
+      className={`${sizeClasses[size]} rounded-full ${avatarColor} ${borderClass} ${className} flex items-center justify-center text-white font-semibold inline-block`}
     >
       {initials}
     </div>

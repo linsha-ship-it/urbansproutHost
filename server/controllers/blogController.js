@@ -8,8 +8,8 @@ const notificationService = require('../utils/notificationService');
 // @route   GET /api/blog
 // @access  Public
 const getAllPosts = asyncHandler(async (req, res) => {
-  const { category, tag, search, status = 'published' } = req.query;
-  const { page, limit, skip } = req.pagination;
+  const { category, tag, search, status = 'published', page = 1, limit = 10 } = req.query;
+  const skip = (parseInt(page) - 1) * parseInt(limit);
 
   // Build query - only show approved posts for public
   let query = { 
@@ -35,11 +35,10 @@ const getAllPosts = asyncHandler(async (req, res) => {
 
   // Get posts with pagination
   const posts = await Blog.find(query)
-    .populate('author', 'name email avatar')
+    .populate('authorId', 'name email avatar')
     .sort({ createdAt: -1 })
     .skip(skip)
-    .limit(limit)
-    .lean();
+    .limit(limit);
 
   // Get total count for pagination
   const total = await Blog.countDocuments(query);
@@ -65,7 +64,7 @@ const getAllPosts = asyncHandler(async (req, res) => {
 // @access  Public
 const getPost = asyncHandler(async (req, res, next) => {
   const post = await Blog.findById(req.params.id)
-    .populate('author', 'name email avatar')
+    .populate('authorId', 'name email avatar')
     .populate('comments.user', 'name avatar')
     .populate('comments.replies.user', 'name avatar')
     .populate('relatedPosts', 'title slug excerpt featuredImage publishedAt');
@@ -89,7 +88,7 @@ const getPost = asyncHandler(async (req, res, next) => {
 // @access  Public
 const getPostBySlug = asyncHandler(async (req, res, next) => {
   const post = await Blog.findOne({ slug: req.params.slug, status: 'published' })
-    .populate('author', 'name email avatar')
+    .populate('authorId', 'name email avatar')
     .populate('comments.user', 'name avatar')
     .populate('comments.replies.user', 'name avatar')
     .populate('relatedPosts', 'title slug excerpt featuredImage publishedAt');
@@ -176,7 +175,7 @@ const updatePost = asyncHandler(async (req, res, next) => {
   if (seo) post.seo = { ...post.seo, ...seo };
 
   await post.save();
-  await post.populate('author', 'name email avatar');
+  await post.populate('authorId', 'name email avatar');
 
   res.json({
     success: true,
@@ -337,6 +336,8 @@ const addComment = asyncHandler(async (req, res, next) => {
   }
 
   const comment = {
+    author: req.user.name,
+    authorEmail: req.user.email,
     user: req.user._id,
     content: content.trim(),
     isApproved: req.user.role === 'admin' // Auto-approve admin comments
@@ -398,6 +399,8 @@ const replyToComment = asyncHandler(async (req, res, next) => {
   }
 
   const reply = {
+    author: req.user.name,
+    authorEmail: req.user.email,
     user: req.user._id,
     content: content.trim()
   };
@@ -437,10 +440,9 @@ const getCategories = asyncHandler(async (req, res) => {
 // @access  Public
 const getFeaturedPosts = asyncHandler(async (req, res) => {
   const posts = await Blog.find({ status: 'published', isFeatured: true })
-    .populate('author', 'name email avatar')
+    .populate('authorId', 'name email avatar')
     .sort({ publishedAt: -1 })
-    .limit(6)
-    .lean();
+    .limit(6);
 
   res.json({
     success: true,
@@ -540,7 +542,8 @@ const rejectPost = asyncHandler(async (req, res, next) => {
 // @route   GET /api/blog/my-posts
 // @access  Private
 const getMyPosts = asyncHandler(async (req, res) => {
-  const { page, limit, skip } = req.pagination;
+  const { page = 1, limit = 10 } = req.query;
+  const skip = (parseInt(page) - 1) * parseInt(limit);
 
   const posts = await Blog.find({ 
     authorId: req.user._id,
@@ -574,6 +577,109 @@ const getMyPosts = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Get blog statistics
+// @route   GET /api/blog/stats
+// @access  Public
+const getBlogStats = asyncHandler(async (req, res) => {
+  const totalPosts = await Blog.countDocuments({ 
+    status: 'published', 
+    approvalStatus: 'approved' 
+  });
+  
+  const totalComments = await Blog.aggregate([
+    { $match: { status: 'published', approvalStatus: 'approved' } },
+    { $project: { commentCount: { $size: { $ifNull: ['$comments', []] } } } },
+    { $group: { _id: null, total: { $sum: '$commentCount' } } }
+  ]);
+
+  const totalLikes = await Blog.aggregate([
+    { $match: { status: 'published', approvalStatus: 'approved' } },
+    { $project: { likeCount: { $size: { $ifNull: ['$likes', []] } } } },
+    { $group: { _id: null, total: { $sum: '$likeCount' } } }
+  ]);
+
+  const activeToday = await Blog.countDocuments({
+    status: 'published',
+    approvalStatus: 'approved',
+    createdAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) }
+  });
+
+  res.json({
+    success: true,
+    data: {
+      totalPosts,
+      totalComments: totalComments[0]?.total || 0,
+      totalLikes: totalLikes[0]?.total || 0,
+      activeToday
+    }
+  });
+});
+
+// @desc    Get top contributors
+// @route   GET /api/blog/top-contributors
+// @access  Public
+const getTopContributors = asyncHandler(async (req, res) => {
+  const contributors = await Blog.aggregate([
+    { $match: { status: 'published', approvalStatus: 'approved' } },
+    { $group: { 
+      _id: '$authorId', 
+      name: { $first: '$author' },
+      postCount: { $sum: 1 },
+      totalLikes: { $sum: { $size: { $ifNull: ['$likes', []] } } },
+      totalComments: { $sum: { $size: { $ifNull: ['$comments', []] } } }
+    }},
+    { $sort: { postCount: -1, totalLikes: -1 } },
+    { $limit: 10 },
+    { $lookup: {
+      from: 'users',
+      localField: '_id',
+      foreignField: '_id',
+      as: 'user'
+    }},
+    { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
+    { $project: {
+      _id: 1,
+      name: 1,
+      postCount: 1,
+      totalLikes: 1,
+      totalComments: 1,
+      avatar: '$user.avatar'
+    }}
+  ]);
+
+  res.json({
+    success: true,
+    data: { contributors }
+  });
+});
+
+// @desc    Get trending hashtags
+// @route   GET /api/blog/trending-hashtags
+// @access  Public
+const getTrendingHashtags = asyncHandler(async (req, res) => {
+  const hashtags = await Blog.aggregate([
+    { $match: { status: 'published', approvalStatus: 'approved' } },
+    { $unwind: '$tags' },
+    { $group: { 
+      _id: '$tags', 
+      count: { $sum: 1 },
+      posts: { $push: '$_id' }
+    }},
+    { $sort: { count: -1 } },
+    { $limit: 10 },
+    { $project: {
+      tag: '$_id',
+      count: 1,
+      posts: { $size: '$posts' }
+    }}
+  ]);
+
+  res.json({
+    success: true,
+    data: { hashtags }
+  });
+});
+
 module.exports = {
   getAllPosts,
   getPost,
@@ -590,5 +696,8 @@ module.exports = {
   getFeaturedPosts,
   approvePost,
   rejectPost,
-  getMyPosts
+  getMyPosts,
+  getBlogStats,
+  getTopContributors,
+  getTrendingHashtags
 };

@@ -8,6 +8,7 @@ import {
   Cog,
   BarChart3
 } from 'lucide-react';
+import Navbar from '../layout/Navbar';
 
 const AdminLayout = ({ children }) => {
   const location = useLocation();
@@ -27,7 +28,9 @@ const AdminLayout = ({ children }) => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <Navbar />
+      <div className="pt-[82px]">
+        <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Admin Sidebar */}
           <div className="lg:w-64 flex-shrink-0">
@@ -61,6 +64,7 @@ const AdminLayout = ({ children }) => {
               {children}
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>

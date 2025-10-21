@@ -30,3 +30,15 @@ router.delete('/:id', protect, admin, deleteAdmin);
 
 module.exports = router;
 
+
+
+
+
+
+
+
+
+
+
+
+

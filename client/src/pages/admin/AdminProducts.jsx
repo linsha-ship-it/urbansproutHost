@@ -80,6 +80,12 @@ const AdminProducts = () => {
   const [filterPriceRange, setFilterPriceRange] = useState({ min: '', max: '' });
   const [availableDiscounts, setAvailableDiscounts] = useState([]);
   const [loadingDiscounts, setLoadingDiscounts] = useState(false);
+  const [upcomingDiscounts, setUpcomingDiscounts] = useState([]);
+  const [showUpcomingDiscounts, setShowUpcomingDiscounts] = useState(false);
+  const [productSearchTerm, setProductSearchTerm] = useState('');
+  const [productSuggestions, setProductSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
   const [sortBy, setSortBy] = useState('name');
   const [sortOrder, setSortOrder] = useState('asc');
 
@@ -113,6 +119,7 @@ const AdminProducts = () => {
     loadReviews();
     loadCategoriesWithProducts();
     loadAvailableDiscounts();
+    loadUpcomingDiscounts();
   }, [currentPage, searchTerm, filterCategory, filterStatus, filterFeatured, filterStock, filterPriceRange, sortBy, sortOrder]);
 
   const loadProducts = async () => {
@@ -223,6 +230,95 @@ const AdminProducts = () => {
     } finally {
       setLoadingDiscounts(false);
     }
+  };
+
+  const loadUpcomingDiscounts = async () => {
+    try {
+      const response = await apiCall('/admin/products/upcoming-discounts');
+      if (response.success) {
+        setUpcomingDiscounts(response.data.upcomingDiscounts);
+      }
+    } catch (error) {
+      console.error('Error loading upcoming discounts:', error);
+      setUpcomingDiscounts([]);
+    }
+  };
+
+  // Search products for autocomplete
+  const searchProducts = async (searchTerm) => {
+    if (searchTerm.length < 2) {
+      setProductSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    try {
+      const response = await apiCall(`/admin/products?search=${encodeURIComponent(searchTerm)}&limit=10`);
+      if (response.success) {
+        const filteredProducts = response.data.products.filter(product => 
+          !discountData.products.includes(product._id)
+        );
+        setProductSuggestions(filteredProducts);
+        setShowSuggestions(true);
+      }
+    } catch (error) {
+      console.error('Error searching products:', error);
+      setProductSuggestions([]);
+    }
+  };
+
+  // Handle product search input
+  const handleProductSearch = (value) => {
+    setProductSearchTerm(value);
+    setSelectedSuggestionIndex(-1);
+    searchProducts(value);
+  };
+
+  // Handle keyboard navigation
+  const handleKeyDown = (e) => {
+    if (!showSuggestions || productSuggestions.length === 0) return;
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setSelectedSuggestionIndex(prev => 
+          prev < productSuggestions.length - 1 ? prev + 1 : prev
+        );
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1);
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (selectedSuggestionIndex >= 0) {
+          addProductToDiscount(productSuggestions[selectedSuggestionIndex]);
+        }
+        break;
+      case 'Escape':
+        setShowSuggestions(false);
+        setSelectedSuggestionIndex(-1);
+        break;
+    }
+  };
+
+  // Add product to discount
+  const addProductToDiscount = (product) => {
+    const updatedProducts = [...discountData.products, product._id];
+    handleDiscountDataChange('products', updatedProducts);
+    setProductSearchTerm('');
+    setShowSuggestions(false);
+  };
+
+  // Remove product from discount
+  const removeProductFromDiscount = (productId) => {
+    const updatedProducts = discountData.products.filter(id => id !== productId);
+    handleDiscountDataChange('products', updatedProducts);
+  };
+
+  // Get selected products details
+  const getSelectedProducts = () => {
+    return products.filter(product => discountData.products.includes(product._id));
   };
 
   const resetForm = () => {
@@ -678,6 +774,10 @@ const AdminProducts = () => {
           products: []
         });
         setDiscountValidation({ startDateError: '', endDateError: '', valueError: '', isValid: true });
+        setProductSearchTerm('');
+        setProductSuggestions([]);
+        setShowSuggestions(false);
+        setSelectedSuggestionIndex(-1);
       }
     } catch (error) {
       console.error('Error creating discount:', error);
@@ -698,6 +798,86 @@ const AdminProducts = () => {
     } catch (error) {
       console.error(`Error ${action}ing review:`, error);
       setMessage(`Error ${action}ing review`);
+    }
+  };
+
+  // Apply discount to a specific product
+  const applyDiscountToProduct = async (productId, discountId) => {
+    try {
+      const response = await apiCall(`/admin/products/${productId}/discount`, {
+        method: 'PUT',
+        body: JSON.stringify({ discountId, appliedBy: 'manual' })
+      });
+
+      if (response.success) {
+        setMessage('Discount applied to product successfully');
+        loadProducts(); // Reload products to show updated discount info
+      }
+    } catch (error) {
+      console.error('Error applying discount to product:', error);
+      setMessage('Error applying discount: ' + error.message);
+    }
+  };
+
+  // Remove discount from a specific product
+  const removeDiscountFromProduct = async (productId, discountId) => {
+    try {
+      const response = await apiCall(`/admin/products/${productId}/discount/${discountId}`, {
+        method: 'DELETE'
+      });
+
+      if (response.success) {
+        setMessage('Discount removed from product successfully');
+        loadProducts(); // Reload products to show updated discount info
+      }
+    } catch (error) {
+      console.error('Error removing discount from product:', error);
+      setMessage('Error removing discount: ' + error.message);
+    }
+  };
+
+  // Apply discount to all products in a category
+  const applyDiscountToCategory = async (discountId, category) => {
+    try {
+      const response = await apiCall(`/admin/discounts/${discountId}/apply-to-category`, {
+        method: 'POST',
+        body: JSON.stringify({ category })
+      });
+
+      if (response.success) {
+        setMessage(`Discount applied to ${response.data.appliedCount} products in category "${category}"`);
+        loadProducts(); // Reload products to show updated discount info
+      }
+    } catch (error) {
+      console.error('Error applying discount to category:', error);
+      setMessage('Error applying discount to category: ' + error.message);
+    }
+  };
+
+  // Apply discount to multiple selected products
+  const handleBulkApplyDiscount = async (discountId) => {
+    try {
+      let appliedCount = 0;
+      let skippedCount = 0;
+
+      for (const productId of selectedProducts) {
+        try {
+          await apiCall(`/admin/products/${productId}/discount`, {
+            method: 'PUT',
+            body: JSON.stringify({ discountId, appliedBy: 'manual' })
+          });
+          appliedCount++;
+        } catch (error) {
+          skippedCount++;
+        }
+      }
+
+      setMessage(`Discount applied to ${appliedCount} products, ${skippedCount} already had this discount`);
+      setSelectedProducts([]); // Clear selection
+      loadProducts(); // Reload products to show updated discount info
+    } catch (error) {
+      console.error('Error applying bulk discount:', error);
+      setMessage('Error applying bulk discount: ' + error.message);
     }
   };
 
@@ -848,6 +1028,23 @@ const AdminProducts = () => {
               >
                 <Percent className="h-4 w-4 mr-2" />
                 Discounts
+              </button>
+              <button
+                onClick={() => {
+                  setShowUpcomingDiscounts(!showUpcomingDiscounts);
+                  if (!showUpcomingDiscounts) {
+                    loadUpcomingDiscounts();
+                  }
+                }}
+                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Calendar className="h-4 w-4 mr-2" />
+                Upcoming Discounts
+                {upcomingDiscounts.length > 0 && (
+                  <span className="ml-2 px-2 py-1 bg-blue-500 text-white text-xs rounded-full">
+                    {upcomingDiscounts.length}
+                  </span>
+                )}
               </button>
               <button
                 onClick={() => setShowCategoryModal(true)}
@@ -1146,9 +1343,43 @@ const AdminProducts = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         <div className="flex flex-col">
-                          <span className="font-medium">₹{product.currentPrice}</span>
-                          {product.discountPrice && (
+                          <span className="font-medium">₹{product.finalPrice || product.currentPrice}</span>
+                          {(product.finalPrice || product.discountPrice) && (
                             <span className="text-xs text-gray-500 line-through">₹{product.regularPrice}</span>
+                          )}
+                          {product.appliedDiscounts && product.appliedDiscounts.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {product.appliedDiscounts.slice(0, 2).map((discount, idx) => {
+                                const now = new Date();
+                                const startDate = new Date(discount.discountId?.startDate || discount.startDate);
+                                const endDate = new Date(discount.discountId?.endDate || discount.endDate);
+                                const isActive = now >= startDate && now <= endDate;
+                                const isUpcoming = now < startDate;
+                                
+                                return (
+                                  <span 
+                                    key={idx} 
+                                    className={`px-1 py-0.5 text-xs rounded ${
+                                      isActive ? 'bg-green-100 text-green-700' : 
+                                      isUpcoming ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
+                                    }`}
+                                    title={
+                                      isActive ? 'Active discount' : 
+                                      isUpcoming ? `Starts ${startDate.toLocaleDateString()}` : 
+                                      'Expired discount'
+                                    }
+                                  >
+                                    {discount.discountName || discount.discountId?.name}
+                                    {isUpcoming && ' (↑)'}
+                                  </span>
+                                );
+                              })}
+                              {product.appliedDiscounts.length > 2 && (
+                                <span className="px-1 py-0.5 bg-purple-200 text-purple-800 text-xs rounded">
+                                  +{product.appliedDiscounts.length - 2}
+                                </span>
+                              )}
+                            </div>
                           )}
                         </div>
                       </td>
@@ -1476,9 +1707,7 @@ const AdminProducts = () => {
                   </label>
                   <select value={discountData.applicableTo} onChange={(e) => handleDiscountDataChange('applicableTo', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                     <option value="all">All Products</option>
-                    {categoriesWithProducts.map((category) => (
-                      <option key={category} value={category}>{category}</option>
-                    ))}
+                    <option value="category">Specific Category</option>
                     <option value="products">Specific Products (Manual Selection)</option>
                   </select>
                   {categoriesWithProducts.length === 0 && (
@@ -1519,23 +1748,98 @@ const AdminProducts = () => {
                 {discountData.applicableTo === 'products' && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Products *</label>
-                    <select
-                      multiple
-                      value={discountData.products}
-                      onChange={(e) => {
-                        const selectedProducts = Array.from(e.target.selectedOptions, option => option.value);
-                        handleDiscountDataChange('products', selectedProducts);
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      required
-                    >
-                      {products.map((product) => (
-                        <option key={product._id} value={product._id}>
-                          {product.name} - ₹{product.regularPrice}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple products</p>
+                    
+                    {/* Product Search Input */}
+                    <div className="relative">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <input
+                          type="text"
+                          value={productSearchTerm}
+                          onChange={(e) => handleProductSearch(e.target.value)}
+                          onKeyDown={handleKeyDown}
+                          placeholder="Search and add products..."
+                          className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          onFocus={() => setShowSuggestions(true)}
+                          onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                        />
+                      </div>
+                      
+                      {/* Product Suggestions Dropdown */}
+                      {showSuggestions && productSuggestions.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                          {productSuggestions.map((product, index) => (
+                            <div
+                              key={product._id}
+                              onClick={() => addProductToDiscount(product)}
+                              className={`px-3 py-2 cursor-pointer border-b border-gray-100 last:border-b-0 ${
+                                index === selectedSuggestionIndex 
+                                  ? 'bg-blue-100 text-blue-900' 
+                                  : 'hover:bg-gray-100'
+                              }`}
+                            >
+                              <div className="flex justify-between items-center">
+                                <div>
+                                  <p className="font-medium text-gray-900">{product.name}</p>
+                                  <p className="text-sm text-gray-500">{product.category}</p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="font-medium text-gray-900">₹{product.regularPrice}</p>
+                                  <p className="text-xs text-gray-500">SKU: {product.sku}</p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Selected Products List */}
+                    {discountData.products.length > 0 && (
+                      <div className="mt-3">
+                        <p className="text-sm font-medium text-gray-700 mb-2">
+                          Selected Products ({discountData.products.length})
+                        </p>
+                        <div className="space-y-2 max-h-40 overflow-y-auto">
+                          {getSelectedProducts().map((product) => (
+                            <div
+                              key={product._id}
+                              className="flex items-center justify-between p-2 bg-gray-50 rounded-lg"
+                            >
+                              <div className="flex-1">
+                                <p className="font-medium text-gray-900">{product.name}</p>
+                                <p className="text-sm text-gray-500">
+                                  {product.category} • ₹{product.regularPrice} • SKU: {product.sku}
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => removeProductFromDiscount(product._id)}
+                                className="ml-2 p-1 text-red-600 hover:text-red-800 hover:bg-red-100 rounded"
+                                title="Remove product"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="mt-2 flex items-center justify-between">
+                      <p className="text-xs text-gray-500">
+                        Type product name to search and add products to this discount
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const allProductIds = products.map(p => p._id);
+                          handleDiscountDataChange('products', allProductIds);
+                        }}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                      >
+                        Select All Products
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1568,6 +1872,122 @@ const AdminProducts = () => {
             loadCategoriesWithProducts();
           }}
         />
+      )}
+
+      {/* Upcoming Discounts Modal */}
+      {showUpcomingDiscounts && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[80vh] overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-gray-900">Upcoming Discounts</h2>
+                <button 
+                  onClick={() => setShowUpcomingDiscounts(false)} 
+                  className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              
+              <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                {upcomingDiscounts.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-500">No upcoming discounts scheduled</p>
+                  </div>
+                ) : (
+                  upcomingDiscounts.map((item, idx) => (
+                    <div key={idx} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-gray-900">{item.discount.name}</h3>
+                            {item.discount.autoApplied && (
+                              <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
+                                Applied
+                              </span>
+                            )}
+                            {item.discount.status === 'scheduled' && (
+                              <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full">
+                                Scheduled
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-600">
+                            {item.discount.type === 'percentage' ? `${item.discount.value}% off` : `₹${item.discount.value} off`}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Applicable to: {item.discount.applicableTo === 'all' ? 'All Products' : 
+                                           item.discount.applicableTo === 'category' ? `Category: ${item.discount.category}` : 
+                                           'Specific Products'}
+                          </p>
+                          {item.discount.autoApplied && (
+                            <p className="text-xs text-green-600 mt-1">
+                              Applied to {item.discount.appliedCount} products
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-medium text-blue-600">
+                            Starts: {new Date(item.discount.startDate).toLocaleDateString()}
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            Ends: {new Date(item.discount.endDate).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600">
+                          {item.discount.autoApplied 
+                            ? `${item.discount.appliedCount} products currently have this discount`
+                            : `${item.productCount} products will be affected`
+                          }
+                        </span>
+                        {!item.discount.autoApplied && item.discount.status === 'scheduled' && (
+                          <button
+                            onClick={() => {
+                              if (item.discount.applicableTo === 'category') {
+                                applyDiscountToCategory(item.discount._id, item.discount.category);
+                              }
+                              setShowUpcomingDiscounts(false);
+                            }}
+                            className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
+                          >
+                            Apply Now
+                          </button>
+                        )}
+                        {item.discount.autoApplied && (
+                          <span className="px-3 py-1 bg-green-100 text-green-700 text-sm rounded">
+                            Auto-Applied
+                          </span>
+                        )}
+                      </div>
+                      
+                      {item.products.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-gray-100">
+                          <p className="text-xs text-gray-500 mb-2">Sample products:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {item.products.slice(0, 5).map((product, pIdx) => (
+                              <span key={pIdx} className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded">
+                                {product.name}
+                              </span>
+                            ))}
+                            {item.products.length > 5 && (
+                              <span className="px-2 py-1 bg-gray-200 text-gray-600 text-xs rounded">
+                                +{item.products.length - 5} more
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
     </>

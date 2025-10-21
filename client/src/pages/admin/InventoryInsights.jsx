@@ -57,34 +57,53 @@ const InventoryInsights = () => {
   }, [selectedPeriod]);
 
   const setupRealtimeUpdates = () => {
-    if (socketRef.current) {
-      socketRef.current.disconnect();
+    try {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+
+      // The backend Socket.IO server is initialized on the same port as the API (default 5002)
+      const SOCKET_URL = 'http://localhost:5002';
+      const token = localStorage.getItem('urbansprout_token');
+
+      socketRef.current = io(SOCKET_URL, {
+        auth: token ? { token } : undefined,
+        withCredentials: true,
+        transports: ['websocket', 'polling'],
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000
+      });
+
+      socketRef.current.on('connect', () => {
+        console.log('Connected to real-time updates');
+      });
+
+      socketRef.current.on('connect_error', (err) => {
+        // Avoid noisy console spam when socket server is unavailable
+        console.warn('Realtime updates unavailable:', err.message || err);
+      });
+
+      socketRef.current.on('orderCreated', () => {
+        console.log('New order created, refreshing insights...');
+        loadInventoryInsights();
+      });
+
+      socketRef.current.on('productUpdated', () => {
+        console.log('Product updated, refreshing insights...');
+        loadInventoryInsights();
+      });
+
+      socketRef.current.on('stockUpdated', () => {
+        console.log('Stock updated, refreshing insights...');
+        loadInventoryInsights();
+      });
+
+      socketRef.current.on('disconnect', () => {
+        console.log('Disconnected from real-time updates');
+      });
+    } catch (e) {
+      console.warn('Realtime updates initialization failed:', e);
     }
-    
-    socketRef.current = io('http://localhost:5001');
-    
-    socketRef.current.on('connect', () => {
-      console.log('Connected to real-time updates');
-    });
-    
-    socketRef.current.on('orderCreated', () => {
-      console.log('New order created, refreshing insights...');
-      loadInventoryInsights();
-    });
-    
-    socketRef.current.on('productUpdated', () => {
-      console.log('Product updated, refreshing insights...');
-      loadInventoryInsights();
-    });
-    
-    socketRef.current.on('stockUpdated', () => {
-      console.log('Stock updated, refreshing insights...');
-      loadInventoryInsights();
-    });
-    
-    socketRef.current.on('disconnect', () => {
-      console.log('Disconnected from real-time updates');
-    });
   };
 
   const loadInventoryInsights = async () => {

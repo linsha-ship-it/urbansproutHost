@@ -99,6 +99,35 @@ const discountSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
+  },
+  // Track applied products for automatic lifecycle management
+  appliedProducts: [{
+    productId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Product',
+      required: true
+    },
+    appliedAt: {
+      type: Date,
+      default: Date.now
+    },
+    removedAt: {
+      type: Date,
+      default: null
+    }
+  }],
+  // Automatic lifecycle management
+  autoApplied: {
+    type: Boolean,
+    default: false
+  },
+  autoRemoved: {
+    type: Boolean,
+    default: false
+  },
+  lastProcessedAt: {
+    type: Date,
+    default: null
   }
 }, {
   timestamps: true
@@ -109,6 +138,8 @@ discountSchema.index({ active: 1, startDate: 1, endDate: 1 });
 discountSchema.index({ applicableTo: 1, category: 1 });
 discountSchema.index({ products: 1 });
 discountSchema.index({ createdBy: 1 });
+discountSchema.index({ autoApplied: 1, autoRemoved: 1 });
+discountSchema.index({ 'appliedProducts.productId': 1 });
 
 // Virtual for discount status
 discountSchema.virtual('status').get(function() {
@@ -199,6 +230,114 @@ discountSchema.methods.incrementUsage = function() {
     return this.save();
   }
   return Promise.resolve(this);
+};
+
+// Method to automatically apply discount to products
+discountSchema.methods.autoApplyToProducts = async function() {
+  const Product = require('./Product');
+  const now = new Date();
+  
+  if (!this.isApplicable() || this.autoApplied) {
+    return { applied: 0, skipped: 0 };
+  }
+
+  let query = { published: true, archived: false };
+  
+  switch (this.applicableTo) {
+    case 'all':
+      // All products
+      break;
+    case 'category':
+      query.category = this.category;
+      break;
+    case 'products':
+      query._id = { $in: this.products };
+      break;
+  }
+
+  const products = await Product.find(query);
+  let appliedCount = 0;
+  let skippedCount = 0;
+
+  for (const product of products) {
+    // Check if already applied
+    const alreadyApplied = this.appliedProducts.some(
+      ap => ap.productId.toString() === product._id.toString() && !ap.removedAt
+    );
+    
+    if (alreadyApplied) {
+      skippedCount++;
+      continue;
+    }
+
+    // Apply discount to product
+    const added = product.addDiscount(this, 'automatic');
+    if (added) {
+      appliedCount++;
+      await product.save();
+      
+      // Track in discount
+      this.appliedProducts.push({
+        productId: product._id,
+        appliedAt: now
+      });
+    } else {
+      skippedCount++;
+    }
+  }
+
+  this.autoApplied = true;
+  this.lastProcessedAt = now;
+  await this.save();
+
+  return { applied: appliedCount, skipped: skippedCount };
+};
+
+// Method to automatically remove discount from products
+discountSchema.methods.autoRemoveFromProducts = async function() {
+  const Product = require('./Product');
+  const now = new Date();
+  
+  if (this.autoRemoved) {
+    return { removed: 0, skipped: 0 };
+  }
+
+  let removedCount = 0;
+  let skippedCount = 0;
+
+  for (const appliedProduct of this.appliedProducts) {
+    if (appliedProduct.removedAt) {
+      skippedCount++;
+      continue;
+    }
+
+    try {
+      const product = await Product.findById(appliedProduct.productId);
+      if (product) {
+        const removed = product.removeDiscount(this._id);
+        if (removed) {
+          removedCount++;
+          await product.save();
+        } else {
+          skippedCount++;
+        }
+      } else {
+        skippedCount++;
+      }
+
+      // Mark as removed
+      appliedProduct.removedAt = now;
+    } catch (error) {
+      console.error(`Error removing discount from product ${appliedProduct.productId}:`, error);
+      skippedCount++;
+    }
+  }
+
+  this.autoRemoved = true;
+  this.lastProcessedAt = now;
+  await this.save();
+
+  return { removed: removedCount, skipped: skippedCount };
 };
 
 // Pre-save middleware to validate dates

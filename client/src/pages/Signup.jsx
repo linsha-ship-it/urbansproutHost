@@ -73,7 +73,9 @@ const Signup = () => {
           >
             <Leaf className="h-8 w-8 text-cream-100" />
           </motion.div>
-          <h2 className="text-3xl font-bold text-forest-green-800">Join UrbanSprout</h2>
+          <Link to="/" className="text-3xl font-bold text-forest-green-800 hover:text-forest-green-600 transition-colors cursor-pointer">
+            Join UrbanSprout
+          </Link>
           <p className="mt-2 text-forest-green-600">Create your account and start growing</p>
         </div>
 

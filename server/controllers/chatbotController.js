@@ -1,6 +1,7 @@
 const Plant = require('../models/Plant');
 const { AppError } = require('../middlewares/errorHandler');
 const { asyncHandler } = require('../middlewares/errorHandler');
+const mistralService = require('../services/mistralService');
 const fs = require('fs');
 const path = require('path');
 
@@ -276,26 +277,14 @@ try {
   ];
 }
 
-// Session management for conversation flow
+// Session management for Mistral conversation history
 const userSessions = new Map();
 
-// Conversation flow states
-const conversationFlows = {
-  INITIAL: 'initial',
-  SUNLIGHT_QUESTION: 'sunlight_question',
-  MAINTENANCE_QUESTION: 'maintenance_question', 
-  SPACE_QUESTION: 'space_question',
-  RECOMMENDATIONS: 'recommendations',
-  BEGINNER_FOLLOWUP: 'beginner_followup',
-  QUICK_FOLLOWUP: 'quick_followup'
-};
-
-// Session management functions
+// Session management functions for Mistral conversations
 function getSession(userId) {
   if (!userSessions.has(userId)) {
     userSessions.set(userId, {
-      step: conversationFlows.INITIAL,
-      data: {},
+      conversationHistory: [],
       timestamp: Date.now()
     });
   }
@@ -304,59 +293,14 @@ function getSession(userId) {
 
 function updateSession(userId, step, data = {}) {
   const session = getSession(userId);
-  session.step = step;
-  session.data = { ...session.data, ...data };
+  if (data.conversationHistory) {
+    session.conversationHistory = data.conversationHistory;
+  }
   session.timestamp = Date.now();
   userSessions.set(userId, session);
 }
 
-// Plant recommendation function based on collected conditions
-function getPlantRecommendations(sunlight, maintenance, space, preferences = {}) {
-  let filteredPlants = [...plantDatabase];
-  
-  // Filter by sunlight
-  if (sunlight) {
-    filteredPlants = filteredPlants.filter(plant => 
-      plant.sunlight === sunlight || 
-      (sunlight === 'partial' && (plant.sunlight === 'low' || plant.sunlight === 'full'))
-    );
-  }
-  
-  // Filter by maintenance level
-  if (maintenance) {
-    filteredPlants = filteredPlants.filter(plant => plant.maintenance === maintenance);
-  }
-  
-  // Filter by space
-  if (space) {
-    filteredPlants = filteredPlants.filter(plant => plant.space === space);
-  }
-  
-  // Filter by specific preferences
-  if (preferences.quickGrowing) {
-    filteredPlants = filteredPlants.filter(plant => {
-      const growTime = plant.growTime || '';
-      const daysMatch = growTime.match(/(\d+)-?(\d+)?\s*days?/);
-      if (daysMatch) {
-        const maxDays = daysMatch[2] ? parseInt(daysMatch[2]) : parseInt(daysMatch[1]);
-        return maxDays <= 60;
-      }
-      return false;
-    });
-  }
-  
-  if (preferences.beginner) {
-    filteredPlants = filteredPlants.filter(plant => 
-      plant.features.includes('beginner_friendly') || 
-      plant.maintenance === 'low' ||
-      plant.type === 'herb' ||
-      (plant.type === 'vegetable' && plant.maintenance === 'low')
-    );
-  }
-  
-  // Return top 6 recommendations
-  return filteredPlants.slice(0, 6);
-}
+// Removed static plant recommendation function - now using Mistral AI
 
 // Store item recommendation function - now returns actual product IDs
 async function getStoreRecommendations(space, maintenance) {
@@ -385,498 +329,106 @@ async function getStoreRecommendations(space, maintenance) {
   }
 }
 
-// Specific recommendations based on user preferences
-function getSpecificRecommendations(space, time, sunlight) {
-  let plants = [];
-  
-  // Filter plants based on space, time, and sunlight
-  if (space === 'small' || space === 'indoor') {
-    plants = plantDatabase.filter(plant => 
-      plant.space === 'small' && 
-      plant.maintenance === 'low' &&
-      (plant.sunlight === sunlight || plant.sunlight === 'partial')
+// Removed static specific recommendations function - now using Mistral AI
+
+// Removed static fruit recommendations function - now using Mistral AI
+
+// Removed static vegetable recommendations function - now using Mistral AI
+
+// Mistral-powered conversation processing
+async function processMistralConversation(userId, message) {
+  try {
+    // Get conversation history from session
+    const session = getSession(userId);
+    const conversationHistory = session.conversationHistory || [];
+    
+    // Generate response using Mistral
+    const mistralResponse = await mistralService.getFilteredResponse(message, conversationHistory);
+    
+    // Update conversation history
+    conversationHistory.push(
+      { role: 'user', content: message },
+      { role: 'assistant', content: mistralResponse }
     );
-  } else if (space === 'medium') {
-    plants = plantDatabase.filter(plant => 
-      (plant.space === 'small' || plant.space === 'medium') &&
-      (plant.maintenance === 'low' || plant.maintenance === 'medium') &&
-      (plant.sunlight === sunlight || plant.sunlight === 'partial')
-    );
-  } else if (space === 'large') {
-    plants = plantDatabase.filter(plant => 
-      plant.maintenance !== 'high' &&
-      (plant.sunlight === sunlight || plant.sunlight === 'partial' || plant.sunlight === 'full')
-    );
+    
+    // Keep only last 10 messages to avoid token limits
+    if (conversationHistory.length > 20) {
+      conversationHistory.splice(0, conversationHistory.length - 20);
+    }
+    
+    updateSession(userId, 'mistral_conversation', { conversationHistory });
+    
+    // Get relevant plant suggestions based on the response
+    const plantSuggestions = extractPlantSuggestions(mistralResponse);
+    const storeItems = await getStoreRecommendations('medium', 'medium');
+    
+    return {
+      message: mistralResponse,
+      plants: plantSuggestions,
+      storeItems: storeItems,
+      buttons: [
+        "Show me container-friendly vegetables",
+        "What hybrid fruits can I grow in pots?",
+        "I'm a beginner, help me start",
+        "Show me fast-growing hybrid varieties",
+        "Tell me about dwarf fruit trees"
+      ],
+      step: "mistral_response"
+    };
+  } catch (error) {
+    console.error('Mistral conversation error:', error);
+    // Fallback to traditional conversation processing
+    return processConversationMessage(userId, message);
   }
-  
-  return {
-    plants: plants.slice(0, 6),
-    space: space,
-    time: time,
-    sunlight: sunlight
-  };
 }
 
-// Fruit recommendations
-function getFruitRecommendations(space, time, sunlight) {
-  const fruits = [
-    {
-      name: "Strawberries",
-      type: "fruit",
-      growTime: "60-90 days",
-      sunlight: "partial",
-      maintenance: "low",
-      space: "small",
-      description: "Sweet, juicy berries perfect for containers. Produces runners for easy propagation.",
-      features: ["beginner_friendly", "container_growing", "perennial"],
-      image: "🍓"
-    },
-    {
-      name: "Cherry Tomatoes",
-      type: "fruit",
-      growTime: "75-85 days",
-      sunlight: "full",
-      maintenance: "medium",
-      space: "medium",
-      description: "Small, sweet tomatoes that are easier to grow than large varieties. Great for snacking!",
-      features: ["beginner_friendly", "container_growing", "high_yield"],
-      image: "🍅"
-    },
-    {
-      name: "Blueberries",
-      type: "fruit",
-      growTime: "2-3 years",
-      sunlight: "partial",
-      maintenance: "medium",
-      space: "medium",
-      description: "Nutrient-rich berries that thrive in acidic soil. Perfect for health-conscious gardeners.",
-      features: ["perennial", "nutrient_dense", "acidic_soil"],
-      image: "🫐"
-    },
-    {
-      name: "Raspberries",
-      type: "fruit",
-      growTime: "1-2 years",
-      sunlight: "partial",
-      maintenance: "medium",
-      space: "large",
-      description: "Delicate, sweet berries that spread easily. Great for jams and fresh eating.",
-      features: ["perennial", "spreading", "high_yield"],
-      image: "🫐"
-    },
-    {
-      name: "Lemon Tree",
-      type: "fruit",
-      growTime: "2-3 years",
-      sunlight: "full",
-      maintenance: "medium",
-      space: "medium",
-      description: "Dwarf varieties perfect for containers. Fresh lemons year-round!",
-      features: ["perennial", "container_growing", "citrus"],
-      image: "🍋"
-    },
-    {
-      name: "Fig Tree",
-      type: "fruit",
-      growTime: "2-3 years",
-      sunlight: "full",
-      maintenance: "low",
-      space: "large",
-      description: "Sweet, unique fruits that are surprisingly easy to grow. Drought tolerant.",
-      features: ["perennial", "drought_tolerant", "unique_flavor"],
-      image: "🍯"
-    }
+// Extract plant suggestions from Mistral response
+function extractPlantSuggestions(response) {
+  const ediblePlants = [
+    'tomato', 'lettuce', 'spinach', 'carrot', 'radish', 'pepper', 'cucumber',
+    'zucchini', 'broccoli', 'cauliflower', 'cabbage', 'bean', 'pea', 'onion',
+    'garlic', 'strawberry', 'blueberry', 'raspberry', 'apple', 'kale', 'arugula',
+    'chard', 'beet', 'turnip', 'eggplant', 'leek', 'brussels sprout', 'squash',
+    'pumpkin', 'corn', 'potato', 'sweet potato'
   ];
   
-  // Filter based on user preferences
-  let filteredFruits = fruits;
+  const responseLower = response.toLowerCase();
+  const mentionedPlants = [];
   
-  if (space === 'small' || space === 'indoor') {
-    filteredFruits = fruits.filter(fruit => fruit.space === 'small');
-  } else if (space === 'medium') {
-    filteredFruits = fruits.filter(fruit => fruit.space !== 'large');
-  }
-  
-  if (time === 'low') {
-    filteredFruits = filteredFruits.filter(fruit => fruit.maintenance === 'low');
-  } else if (time === 'medium') {
-    filteredFruits = filteredFruits.filter(fruit => fruit.maintenance !== 'high');
-  }
-  
-  if (sunlight === 'low') {
-    filteredFruits = filteredFruits.filter(fruit => fruit.sunlight === 'partial');
-  } else if (sunlight === 'partial') {
-    filteredFruits = filteredFruits.filter(fruit => fruit.sunlight !== 'full');
-  }
-  
-  return filteredFruits.slice(0, 4);
-}
-
-// Vegetable recommendations
-function getVegetableRecommendations(space, time, sunlight) {
-  const vegetables = [
-    {
-      name: "Lettuce",
-      type: "vegetable",
-      growTime: "30-45 days",
-      sunlight: "partial",
-      maintenance: "low",
-      space: "small",
-      description: "Fast-growing leafy green perfect for salads. Harvest outer leaves for continuous growth.",
-      features: ["beginner_friendly", "quick_growing", "continuous_harvest"],
-      image: "🥬"
-    },
-    {
-      name: "Spinach",
-      type: "vegetable",
-      growTime: "40-50 days",
-      sunlight: "partial",
-      maintenance: "low",
-      space: "small",
-      description: "Nutrient-packed leafy green that grows well in cool weather. Great for smoothies!",
-      features: ["beginner_friendly", "nutrient_dense", "cool_weather"],
-      image: "🥬"
-    },
-    {
-      name: "Carrots",
-      type: "vegetable",
-      growTime: "70-80 days",
-      sunlight: "partial",
-      maintenance: "low",
-      space: "medium",
-      description: "Sweet, crunchy root vegetables. Choose shorter varieties for containers.",
-      features: ["beginner_friendly", "root_vegetable", "sweet_flavor"],
-      image: "🥕"
-    },
-    {
-      name: "Bell Peppers",
-      type: "vegetable",
-      growTime: "75-90 days",
-      sunlight: "full",
-      maintenance: "medium",
-      space: "medium",
-      description: "Colorful, sweet peppers perfect for cooking. Start with green varieties.",
-      features: ["colorful", "sweet_flavor", "versatile_cooking"],
-      image: "🫑"
-    },
-    {
-      name: "Zucchini",
-      type: "vegetable",
-      growTime: "50-60 days",
-      sunlight: "full",
-      maintenance: "medium",
-      space: "large",
-      description: "High-yielding summer squash. One plant can feed a family!",
-      features: ["high_yield", "summer_crop", "versatile_cooking"],
-      image: "🥒"
-    },
-    {
-      name: "Broccoli",
-      type: "vegetable",
-      growTime: "60-80 days",
-      sunlight: "partial",
-      maintenance: "medium",
-      space: "medium",
-      description: "Nutrient-rich cruciferous vegetable. Great for cool weather growing.",
-      features: ["nutrient_dense", "cool_weather", "cruciferous"],
-      image: "🥦"
-    },
-    {
-      name: "Green Beans",
-      type: "vegetable",
-      growTime: "50-60 days",
-      sunlight: "full",
-      maintenance: "low",
-      space: "medium",
-      description: "Easy-to-grow legumes that fix nitrogen in soil. Great for beginners!",
-      features: ["beginner_friendly", "nitrogen_fixing", "high_yield"],
-      image: "🫛"
-    },
-    {
-      name: "Radishes",
-      type: "vegetable",
-      growTime: "25-30 days",
-      sunlight: "partial",
-      maintenance: "low",
-      space: "small",
-      description: "Super fast-growing root vegetable. Perfect for impatient gardeners!",
-      features: ["quick_growing", "beginner_friendly", "spicy_flavor"],
-      image: "🥕"
+  ediblePlants.forEach(plant => {
+    if (responseLower.includes(plant)) {
+      // Find the plant in our database
+      const foundPlant = plantDatabase.find(p => 
+        p.name.toLowerCase().includes(plant) || 
+        plant.includes(p.name.toLowerCase())
+      );
+      
+      if (foundPlant) {
+        mentionedPlants.push(foundPlant);
+      }
     }
-  ];
+  });
   
-  // Filter based on user preferences
-  let filteredVegetables = vegetables;
+  // Remove duplicates and return top 4
+  const uniquePlants = mentionedPlants.filter((plant, index, self) => 
+    index === self.findIndex(p => p.name === plant.name)
+  );
   
-  if (space === 'small' || space === 'indoor') {
-    filteredVegetables = vegetables.filter(veg => veg.space === 'small');
-  } else if (space === 'medium') {
-    filteredVegetables = vegetables.filter(veg => veg.space !== 'large');
-  }
-  
-  if (time === 'low') {
-    filteredVegetables = filteredVegetables.filter(veg => veg.maintenance === 'low');
-  } else if (time === 'medium') {
-    filteredVegetables = filteredVegetables.filter(veg => veg.maintenance !== 'high');
-  }
-  
-  if (sunlight === 'low') {
-    filteredVegetables = filteredVegetables.filter(veg => veg.sunlight === 'partial');
-  } else if (sunlight === 'partial') {
-    filteredVegetables = filteredVegetables.filter(veg => veg.sunlight !== 'full');
-  }
-  
-  return filteredVegetables.slice(0, 6);
+  return uniquePlants.slice(0, 4);
 }
 
-// Enhanced conversation processing
+// Fallback conversation processing (only used when Mistral API is unavailable)
 async function processConversationMessage(userId, message) {
-  const msg = message.toLowerCase().trim();
-  
-  // Restart/Start over
-  if (msg.includes('start over') || msg.includes('restart') || (msg.includes('begin') && !msg.includes('beginner'))) {
-    return {
-      message: "Let's start fresh! I'll help you find the perfect plants to grow. 🌱",
-      buttons: ["Beginner plants", "Quick growing plants", "Fruits", "Vegetables", "Herbs", "Outdoor plants"],
-      step: "initial"
-    };
-  }
-  
-  // Beginner plants
-  if (msg.includes('beginner') || msg.includes('easy') || msg.includes('simple')) {
-    const beginnerPlants = getPlantRecommendations(null, 'low', 'small', { beginner: true });
-    const beginnerStoreItems = await getStoreRecommendations('small', 'low');
-    
-    return {
-      message: "Perfect! Here are easy plants for beginners:",
-      plants: beginnerPlants,
-      storeItems: beginnerStoreItems,
-      buttons: ["Quick growing plants", "Fruits", "Vegetables", "Herbs", "Start over"],
-      step: "beginner"
-    };
-  }
-  
-  // Quick growing plants
-  if (msg.includes('quick') || msg.includes('fast') || msg.includes('speed')) {
-    const quickPlants = getPlantRecommendations(null, 'low', 'small', { quickGrowing: true });
-    const quickStoreItems = await getStoreRecommendations('small', 'low');
-    
-    return {
-      message: "Great choice! Here are fast-growing plants:",
-      plants: quickPlants,
-      storeItems: quickStoreItems,
-      buttons: ["Beginner plants", "Fruits", "Vegetables", "Herbs", "Start over"],
-      step: "quick"
-    };
-  }
-  
-  // Fruits
-  if (msg.includes('fruits') || msg.includes('fruit')) {
-    const fruitPlants = getFruitRecommendations('medium', 'medium', 'partial');
-    const fruitStoreItems = await getStoreRecommendations('medium', 'medium');
-    
-    return {
-      message: "Delicious! Here are great fruits to grow:",
-      plants: fruitPlants,
-      storeItems: fruitStoreItems,
-      buttons: ["Beginner plants", "Quick growing plants", "Vegetables", "Herbs", "Start over"],
-      step: "fruits"
-    };
-  }
-  
-  // Outdoor plants
-  if (msg.includes('outdoor') || msg.includes('garden') || msg.includes('yard')) {
-    const outdoorPlants = getPlantRecommendations('full', 'medium', 'large', { outdoor: true });
-    const outdoorStoreItems = await getStoreRecommendations('large', 'medium');
-    
-        return {
-      message: "Great for outdoor growing! Here are excellent outdoor plants:",
-      plants: outdoorPlants,
-      storeItems: outdoorStoreItems,
-      buttons: ["Beginner plants", "Quick growing plants", "Fruits", "Vegetables", "Start over"],
-      step: "outdoor"
-    };
-  }
-  
-  // Herbs
-  if (msg.includes('herb') || msg.includes('spice') || msg.includes('cooking')) {
-    const herbPlants = getPlantRecommendations('partial', 'low', 'small', { herbs: true });
-    const herbStoreItems = await getStoreRecommendations('small', 'low');
-        
-        return {
-      message: "Delicious herbs for cooking! Here are great herbs to grow:",
-      plants: herbPlants,
-      storeItems: herbStoreItems,
-      buttons: ["Beginner plants", "Quick growing plants", "Fruits", "Vegetables", "Start over"],
-      step: "herbs"
-    };
-  }
-  
-  // Specific recommendations - enhanced flow
-  if (msg.includes('specific') || msg.includes('custom') || msg.includes('recommendations')) {
-        return {
-      message: "Perfect! Let's find the ideal plants for your specific situation. First, tell me about your available space:",
-      buttons: ["Small space (balcony/windowsill)", "Medium space (patio/small garden)", "Large space (backyard/garden)", "Indoor only"],
-      step: "space_question"
-    };
-  }
-  
-  // Space questions
-  if (msg.includes('small space') || msg.includes('balcony') || msg.includes('windowsill')) {
-        return {
-      message: "Great! Small spaces are perfect for container gardening. Now, how much time can you dedicate to gardening?",
-      buttons: ["Very little time (5-10 min/week)", "Some time (15-30 min/week)", "Moderate time (30-60 min/week)", "Lots of time (1+ hours/week)"],
-      step: "time_question",
-      userData: { space: 'small' }
-    };
-  }
-  
-  if (msg.includes('medium space') || msg.includes('patio') || msg.includes('small garden')) {
-        return {
-      message: "Excellent! Medium spaces offer great flexibility. How much time can you dedicate to gardening?",
-      buttons: ["Very little time (5-10 min/week)", "Some time (15-30 min/week)", "Moderate time (30-60 min/week)", "Lots of time (1+ hours/week)"],
-      step: "time_question",
-      userData: { space: 'medium' }
-    };
-  }
-  
-  if (msg.includes('large space') || msg.includes('backyard') || msg.includes('garden')) {
-        return {
-      message: "Fantastic! Large spaces give you endless possibilities. How much time can you dedicate to gardening?",
-      buttons: ["Very little time (5-10 min/week)", "Some time (15-30 min/week)", "Moderate time (30-60 min/week)", "Lots of time (1+ hours/week)"],
-      step: "time_question",
-      userData: { space: 'large' }
-    };
-  }
-  
-  if (msg.includes('indoor only') || msg.includes('indoor')) {
-        return {
-      message: "Perfect! Indoor gardening is wonderful. How much time can you dedicate to plant care?",
-      buttons: ["Very little time (5-10 min/week)", "Some time (15-30 min/week)", "Moderate time (30-60 min/week)", "Lots of time (1+ hours/week)"],
-      step: "time_question",
-      userData: { space: 'indoor' }
-    };
-  }
-  
-  // Time questions
-  if (msg.includes('very little time') || msg.includes('5-10 min')) {
-        return {
-      message: "Perfect! Low-maintenance plants are ideal for busy schedules. Finally, what's your sunlight situation?",
-      buttons: ["Low sunlight (shade/indoor)", "Partial sunlight (morning sun)", "Full sunlight (6+ hours)", "I'm not sure"],
-      step: "sunlight_question",
-      userData: { space: 'small', time: 'low' }
-    };
-  }
-  
-  if (msg.includes('some time') || msg.includes('15-30 min')) {
-        return {
-      message: "Great! You have enough time for regular care. What's your sunlight situation?",
-      buttons: ["Low sunlight (shade/indoor)", "Partial sunlight (morning sun)", "Full sunlight (6+ hours)", "I'm not sure"],
-      step: "sunlight_question",
-      userData: { space: 'medium', time: 'medium' }
-    };
-  }
-  
-  if (msg.includes('moderate time') || msg.includes('30-60 min')) {
-        return {
-      message: "Excellent! You can handle more demanding plants. What's your sunlight situation?",
-      buttons: ["Low sunlight (shade/indoor)", "Partial sunlight (morning sun)", "Full sunlight (6+ hours)", "I'm not sure"],
-      step: "sunlight_question",
-      userData: { space: 'medium', time: 'high' }
-    };
-  }
-  
-  if (msg.includes('lots of time') || msg.includes('1+ hours')) {
-        return {
-      message: "Wonderful! You can grow almost anything! What's your sunlight situation?",
-      buttons: ["Low sunlight (shade/indoor)", "Partial sunlight (morning sun)", "Full sunlight (6+ hours)", "I'm not sure"],
-      step: "sunlight_question",
-      userData: { space: 'large', time: 'very_high' }
-    };
-  }
-  
-  // Sunlight questions - provide final recommendations
-  if (msg.includes('low sunlight') || msg.includes('shade') || msg.includes('indoor')) {
-    const recommendations = getSpecificRecommendations('small', 'low', 'low');
-    const storeItems = await getStoreRecommendations('small', 'low');
-    
-        return {
-      message: "Perfect! Based on your preferences (small space, low maintenance, low light), here are my top recommendations:",
-      plants: recommendations.plants,
-      storeItems: storeItems,
-      buttons: ["Show me different options", "What about fruits?", "What about vegetables?", "Start over"],
-      step: "recommendations_complete"
-    };
-  }
-  
-  if (msg.includes('partial sunlight') || msg.includes('morning sun')) {
-    const recommendations = getSpecificRecommendations('medium', 'medium', 'partial');
-    const storeItems = await getStoreRecommendations('medium', 'medium');
-    
-        return {
-      message: "Great choice! Based on your preferences (medium space, moderate time, partial sun), here are my recommendations:",
-      plants: recommendations.plants,
-      storeItems: storeItems,
-      buttons: ["Show me different options", "What about fruits?", "What about vegetables?", "Start over"],
-      step: "recommendations_complete"
-    };
-  }
-  
-  if (msg.includes('full sunlight') || msg.includes('6+ hours')) {
-    const recommendations = getSpecificRecommendations('large', 'high', 'full');
-    const storeItems = await getStoreRecommendations('large', 'high');
-    
-        return {
-      message: "Excellent! Based on your preferences (large space, plenty of time, full sun), here are my recommendations:",
-      plants: recommendations.plants,
-      storeItems: storeItems,
-      buttons: ["Show me different options", "What about fruits?", "What about vegetables?", "Start over"],
-      step: "recommendations_complete"
-    };
-  }
-  
-  if (msg.includes('not sure')) {
-    return {
-      message: "No worries! Let's start with versatile plants that adapt to different light conditions. Based on your space and time preferences:",
-      plants: getSpecificRecommendations('medium', 'medium', 'partial').plants,
-      storeItems: await getStoreRecommendations('medium', 'medium'),
-      buttons: ["Show me different options", "What about fruits?", "What about vegetables?", "Start over"],
-      step: "recommendations_complete"
-    };
-  }
-  
-  // Fruit and vegetable specific requests
-  if (msg.includes('fruits') || msg.includes('fruit')) {
-    const fruitRecommendations = getFruitRecommendations('medium', 'medium', 'partial');
-    const storeItems = await getStoreRecommendations('medium', 'medium');
-        
-        return {
-      message: "Delicious! Here are the best fruits for your growing conditions:",
-      plants: fruitRecommendations,
-          storeItems: storeItems,
-      buttons: ["Show me vegetables", "Show me herbs", "Show me different fruits", "Start over"],
-      step: "fruit_recommendations"
-    };
-  }
-  
-  if (msg.includes('vegetables') || msg.includes('veggie')) {
-    const vegetableRecommendations = getVegetableRecommendations('medium', 'medium', 'partial');
-    const storeItems = await getStoreRecommendations('medium', 'medium');
-        
-        return {
-      message: "Nutritious! Here are the best vegetables for your growing conditions:",
-      plants: vegetableRecommendations,
-          storeItems: storeItems,
-      buttons: ["Show me fruits", "Show me herbs", "Show me different vegetables", "Start over"],
-      step: "vegetable_recommendations"
-    };
-  }
-  
-  // Simple fallback - if no keywords match, show initial options
+  // Simple fallback response when Mistral API is not available
   return {
-    message: "I'd love to help you find the perfect plants! Choose what interests you:",
-    buttons: ["Beginner plants", "Quick growing plants", "Fruits", "Vegetables", "Herbs", "Outdoor plants"],
-    step: "initial"
+    message: "Hi! I'm Sprouty, your friendly garden buddy! I'm excited to help you grow amazing vegetables and fruits! I specialize in container gardening and hybrid varieties that are perfect for small spaces. What delicious plants would you like to grow together?",
+    buttons: [
+      "I'm a beginner, help me start",
+      "Show me container-friendly vegetables",
+      "What hybrid fruits can I grow in pots?",
+      "Tell me about fast-growing varieties"
+    ],
+    step: "fallback"
   };
 }
 
@@ -893,7 +445,22 @@ const processMessage = asyncHandler(async (req, res) => {
     });
   }
 
-  // Use the enhanced conversation processing
+  // Check if Mistral API is available
+  if (process.env.MISTRAL_API_KEY) {
+    try {
+      // Use Mistral-powered conversation processing
+      const response = await processMistralConversation(userId || 'anonymous', message);
+      return res.json({
+        success: true,
+        data: response
+      });
+    } catch (error) {
+      console.error('Mistral processing failed, falling back to traditional processing:', error);
+      // Fall through to traditional processing
+    }
+  }
+
+  // Fallback to traditional conversation processing
   const response = await processConversationMessage(userId || 'anonymous', message);
 
   res.json({

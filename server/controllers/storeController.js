@@ -592,8 +592,21 @@ const verifyPayment = asyncHandler(async (req, res, next) => {
     orderData
   } = req.body;
 
+  console.log('🔍 Payment verification request:', {
+    razorpay_order_id,
+    razorpay_payment_id,
+    razorpay_signature: razorpay_signature ? '***' + razorpay_signature.slice(-4) : 'undefined',
+    orderData: orderData ? 'present' : 'undefined'
+  });
+
   if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+    console.error('❌ Missing payment verification data');
     return next(new AppError('Missing payment verification data', 400));
+  }
+
+  if (!orderData) {
+    console.error('❌ Missing order data');
+    return next(new AppError('Missing order data', 400));
   }
 
   try {
@@ -605,8 +618,13 @@ const verifyPayment = asyncHandler(async (req, res, next) => {
       .digest('hex');
 
     if (expectedSignature !== razorpay_signature) {
+      console.error('❌ Invalid payment signature');
+      console.error('Expected:', expectedSignature);
+      console.error('Received:', razorpay_signature);
       return next(new AppError('Invalid payment signature', 400));
     }
+
+    console.log('✅ Payment signature verified successfully');
 
     // Validate products and reduce stock before creating order
     const Product = require('../models/Product');
@@ -744,9 +762,9 @@ const verifyPayment = asyncHandler(async (req, res, next) => {
           orderId: order._id.toString().slice(-8)
         };
 
-        // Temporarily disabled due to Gmail authentication issues
-        // await sendPaymentConfirmationEmail(user.email, user.name, paymentDetails);
-        console.log(`ℹ️ Payment confirmation email would be sent to ${user.email} (${user.role}) - currently disabled`);
+        // Send payment confirmation email
+        await sendPaymentConfirmationEmail(user.email, user.name, paymentDetails);
+        console.log(`✅ Payment confirmation email sent to ${user.email} (${user.role})`);
       } else if (user && user.role === 'admin') {
         console.log(`ℹ️ Skipping payment confirmation email for admin user: ${user.email} (${user.role})`);
       }
@@ -974,6 +992,51 @@ const saveWishlist = asyncHandler(async (req, res) => {
   }
 });
 
+// @desc    Remove item from wishlist
+// @route   DELETE /api/store/wishlist
+// @access  Private
+const removeFromWishlist = asyncHandler(async (req, res) => {
+  try {
+    const { productId } = req.body;
+    
+    if (!productId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Product ID is required'
+      });
+    }
+    
+    const wishlist = await Wishlist.findOne({ user: req.user._id });
+    
+    if (!wishlist) {
+      return res.status(404).json({
+        success: false,
+        message: 'Wishlist not found'
+      });
+    }
+    
+    // Remove the item from wishlist
+    wishlist.items = wishlist.items.filter(item => 
+      item.product.toString() !== productId.toString()
+    );
+    
+    await wishlist.save();
+    
+    res.json({
+      success: true,
+      message: 'Item removed from wishlist successfully',
+      data: { items: wishlist.items }
+    });
+  } catch (error) {
+    console.error('Error removing from wishlist:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error removing from wishlist',
+      error: error.message
+    });
+  }
+});
+
 // @desc    Purchase items from wishlist
 // @route   POST /api/store/wishlist/purchase
 // @access  Private
@@ -1176,5 +1239,6 @@ module.exports = {
   saveCart,
   getWishlist,
   saveWishlist,
+  removeFromWishlist,
   purchaseFromWishlist
 };

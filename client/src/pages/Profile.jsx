@@ -46,20 +46,53 @@ const Profile = () => {
         return
       }
 
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        setMessage('Image size should be less than 5MB')
+      // Validate file size (max 2MB to avoid localStorage issues)
+      if (file.size > 2 * 1024 * 1024) {
+        setMessage('Image size should be less than 2MB')
         return
       }
 
-      // Convert to base64 for storage
+      // Convert to base64 with compression
       const reader = new FileReader()
       reader.onload = (event) => {
-        setProfileData(prev => ({
-          ...prev,
-          profilePhoto: event.target.result
-        }))
-        setMessage('')
+        const img = new Image()
+        img.onload = () => {
+          // Create canvas for compression
+          const canvas = document.createElement('canvas')
+          const ctx = canvas.getContext('2d')
+          
+          // Calculate new dimensions (max 200x200 to reduce size)
+          const maxSize = 200
+          let { width, height } = img
+          
+          if (width > height) {
+            if (width > maxSize) {
+              height = (height * maxSize) / width
+              width = maxSize
+            }
+          } else {
+            if (height > maxSize) {
+              width = (width * maxSize) / height
+              height = maxSize
+            }
+          }
+          
+          canvas.width = width
+          canvas.height = height
+          
+          // Draw compressed image
+          ctx.drawImage(img, 0, 0, width, height)
+          
+          // Convert to base64 with quality compression
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7)
+          
+          setProfileData(prev => ({
+            ...prev,
+            profilePhoto: compressedBase64
+          }))
+          setMessage('')
+        }
+        img.src = event.target.result
       }
       reader.readAsDataURL(file)
     }
@@ -85,31 +118,56 @@ const Profile = () => {
         return
       }
 
-      // Update profile on backend first
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api'}/auth/profile`, {
+      const { apiCall } = await import('../utils/api');
+      
+      // First, upload profile photo if there's a new one
+      let photoUrl = user?.avatar; // Keep existing photo URL
+      
+      if (profileData.profilePhoto && profileData.profilePhoto !== user?.profilePhoto) {
+        try {
+          // Extract image data and metadata
+          const base64Data = profileData.profilePhoto.split(',')[1];
+          const imageType = profileData.profilePhoto.split(',')[0].split(':')[1].split(';')[0];
+          const imageSize = Math.round((base64Data.length * 3) / 4); // Approximate size
+          
+          const photoResponse = await apiCall('/profile-photo', {
+            method: 'POST',
+            body: JSON.stringify({
+              imageData: base64Data,
+              imageType: imageType,
+              imageSize: imageSize,
+              dimensions: {
+                width: 200, // We compress to 200x200
+                height: 200
+              }
+            })
+          });
+          
+          if (photoResponse.success) {
+            photoUrl = photoResponse.data.photoUrl;
+          }
+        } catch (photoError) {
+          console.error('Photo upload error:', photoError);
+          setMessage('Profile updated but photo upload failed. Please try uploading the photo again.')
+        }
+      }
+      
+      // Update profile with name and photo URL
+      const result = await apiCall('/auth/profile', {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('urbansprout_token')}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({
           name: profileData.name.trim(),
-          avatar: profileData.profilePhoto
+          avatar: photoUrl
         })
       })
-
-      if (!response.ok) {
-        throw new Error('Failed to update profile on server')
-      }
-
-      const result = await response.json()
       
       if (result.success) {
         // Update profile using AuthContext with the server response
         const updatedData = {
           name: result.data.user.name,
           displayName: result.data.user.name,
-          profilePhoto: result.data.user.avatar || profileData.profilePhoto
+          avatar: result.data.user.avatar,
+          profilePhoto: result.data.user.avatar
         }
         
         // Update user in AuthContext (this will automatically update localStorage)
@@ -193,7 +251,7 @@ const Profile = () => {
                 </div>
 
                 <p className="text-xs text-gray-500 text-center">
-                  Recommended: Square image, max 5MB
+                  Recommended: Square image, max 2MB (automatically compressed)
                 </p>
 
                 {/* Hidden File Input */}

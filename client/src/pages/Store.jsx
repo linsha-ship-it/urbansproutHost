@@ -1,20 +1,18 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, Link } from 'react-router-dom'
 import { Search, Filter, Heart, ShoppingCart, Star, Grid, List, X, MapPin, CreditCard, Package, Truck, Trash2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { apiCall } from '../utils/api'
 import { initializeRazorpayPayment } from '../config/razorpay'
 import ProductImageSlideshow from '../components/ProductImageSlideshow'
+import Logo from '../components/Logo'
 
 const Store = () => {
-  console.log('Store component rendering...')
-  
   try {
     const { user } = useAuth()
     const [searchParams] = useSearchParams()
     const highlightedProductId = searchParams.get('highlight')
-    console.log('Store component hooks initialized successfully')
   const [viewMode, setViewMode] = useState('grid')
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [sortBy, setSortBy] = useState('popular')
@@ -63,7 +61,6 @@ const Store = () => {
     // Clear any potential localStorage cache
     localStorage.removeItem('store_products_cache')
     localStorage.removeItem('store_categories_cache')
-    console.log('Cache cleared')
   }
 
   // Load products from API with pagination
@@ -76,26 +73,20 @@ const Store = () => {
         setLoadingMore(true)
       }
       
-      console.log(`Loading products from API - page ${page}, category: ${selectedCategory}...`)
       const categoryParam = selectedCategory && selectedCategory !== 'all' ? `&category=${encodeURIComponent(selectedCategory)}` : ''
       const timestamp = Date.now() // Cache busting
       const apiUrl = `/store?page=${page}&limit=12${categoryParam}&_t=${timestamp}`
-      console.log('API URL:', apiUrl)
       const response = await apiCall(apiUrl)
-      console.log('API response:', response)
       
       if (response.success && response.data && response.data.products) {
         const uniqueNewProducts = ensureUniqueProducts(response.data.products)
         
         if (reset) {
-          console.log('Resetting products, new count:', uniqueNewProducts.length)
           setProducts(uniqueNewProducts)
         } else {
-          console.log('Adding more products, current:', products.length, 'new:', uniqueNewProducts.length)
           setProducts(prev => {
             const combinedProducts = [...prev, ...uniqueNewProducts]
             const uniqueCombinedProducts = ensureUniqueProducts(combinedProducts)
-            console.log('Total products after addition:', uniqueCombinedProducts.length)
             return uniqueCombinedProducts
           })
         }
@@ -104,11 +95,7 @@ const Store = () => {
         const totalPages = response.data.pagination?.pages || 1
         setHasMoreProducts(page < totalPages)
         setCurrentPage(page)
-        
-        console.log(`Products loaded successfully: ${response.data.products.length} (page ${page}/${totalPages})`)
-        console.log(`Total products now displayed: ${reset ? response.data.products.length : products.length + response.data.products.length}`)
       } else {
-        console.error('API response invalid:', response)
         if (reset) {
           setProducts([])
         }
@@ -133,8 +120,6 @@ const Store = () => {
 
   // Handle category change
   const handleCategoryChange = (categoryId) => {
-    console.log('Category changed to:', categoryId)
-    console.log('Previous products count:', products.length)
     setSelectedCategory(categoryId)
     // Reset all pagination state
     setCurrentPage(1)
@@ -146,10 +131,8 @@ const Store = () => {
   // Load categories from API
   const loadCategories = async () => {
     try {
-      console.log('Loading categories from API...')
       const timestamp = Date.now() // Cache busting
       const response = await apiCall(`/store/categories?_t=${timestamp}`)
-      console.log('Categories API response:', response)
       
       if (response.success && response.data && response.data.categories) {
         // Format categories for the store page
@@ -165,9 +148,7 @@ const Store = () => {
         ]
         
         setCategories(allCategories)
-        console.log('Categories loaded successfully:', allCategories.length)
       } else {
-        console.error('Categories API response invalid:', response)
         // Fallback: extract categories from products
         const uniqueCategories = [...new Set(products.map(product => product.category))].filter(cat => cat)
         const fallbackCategories = [
@@ -237,8 +218,22 @@ const Store = () => {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [loadingMore, hasMoreProducts, currentPage])
 
+  // Handle checkout parameter from URL
+  useEffect(() => {
+    const checkoutParam = searchParams.get('checkout')
+    const buyNowParam = searchParams.get('buynow')
+    
+    if (checkoutParam === 'true') {
+      if (buyNowParam === 'true') {
+        // Buy now mode - show checkout immediately
+        setShowCheckout(true)
+      } else {
+        // Regular checkout - show cart first
+        setShowCart(true)
+      }
+    }
+  }, [searchParams])
 
-  // Sync guest cart/wishlist to user account when they log in
   const syncGuestDataToUser = async () => {
     try {
       const guestCart = localStorage.getItem('cart_guest')
@@ -304,7 +299,7 @@ const Store = () => {
           return {
             id: prod._id || item.product || item.productId || item.id,
             name: prod.name || item.name,
-            price: (prod.discountPrice || prod.regularPrice || item.price || 0),
+            price: (prod.currentPrice || prod.discountPrice || prod.regularPrice || item.price || 0),
             quantity: item.quantity || 1,
             image: (Array.isArray(prod.images) && prod.images[0]) || item.image,
             stock: prod.stock,
@@ -337,7 +332,8 @@ const Store = () => {
             id: prod._id || item.product || item.productId || item.id,
             _id: prod._id || item.product,
             name: prod.name || item.name,
-            price: (prod.discountPrice || prod.regularPrice || item.price || 0),
+            price: (prod.currentPrice || prod.discountPrice || prod.regularPrice || item.price || 0),
+            currentPrice: prod.currentPrice || item.currentPrice,
             regularPrice: prod.regularPrice || item.regularPrice,
             discountPrice: prod.discountPrice || item.discountPrice,
             image: (Array.isArray(prod.images) && prod.images[0]) || item.image,
@@ -440,7 +436,7 @@ const Store = () => {
         id: productId,
         _id: productId, // Keep both for compatibility
         name: product.name,
-        price: product.discountPrice || product.regularPrice || product.price || 0,
+        price: product.currentPrice || product.discountPrice || product.regularPrice || product.price || 0,
         image: product.images?.[0] || product.image,
         category: product.category,
         stock: product.stock,
@@ -623,7 +619,11 @@ const Store = () => {
                   razorpay_order_id: paymentResponse.razorpay_order_id,
                   razorpay_payment_id: paymentResponse.razorpay_payment_id,
                   razorpay_signature: paymentResponse.razorpay_signature,
-                  orderData: orderData
+                  orderData: {
+                    ...orderData,
+                    razorpayOrderId: response.data.id,
+                    receipt: response.data.receipt
+                  }
                 })
               });
 
@@ -880,7 +880,7 @@ const Store = () => {
       id: item.id || item._id,
       _id: item._id || item.id,
       name: item.name,
-      price: item.discountPrice || item.regularPrice || item.price || 0,
+      price: item.currentPrice || item.discountPrice || item.regularPrice || item.price || 0,
       image: item.image,
       category: item.category,
       stock: item.stock,
@@ -931,7 +931,7 @@ const Store = () => {
       id: item.id || item._id,
       _id: item._id || item.id,
       name: item.name,
-      price: item.discountPrice || item.regularPrice || item.price || 0,
+      price: item.currentPrice || item.discountPrice || item.regularPrice || item.price || 0,
       image: item.image,
       category: item.category,
       stock: item.stock,
@@ -953,10 +953,10 @@ const Store = () => {
     return wishlist.some(item => (item.id || item._id) === productId)
   }
 
-  // Filter products based on price and search (category filtering is now server-side)
+  // Filter and sort products based on price, search, and sort criteria
   const filteredProducts = (products || []).filter(product => {
-    // Use currentPrice (discountPrice if available, otherwise regularPrice)
-    const currentPrice = product.discountPrice || product.regularPrice || product.price || 0
+    // Use currentPrice if available, otherwise fallback to discountPrice/regularPrice
+    const currentPrice = product.currentPrice || product.discountPrice || product.regularPrice || product.price || 0
     const priceMatch = (!minPrice || currentPrice >= parseInt(minPrice)) && 
                       (!maxPrice || currentPrice <= parseInt(maxPrice))
     
@@ -964,17 +964,58 @@ const Store = () => {
       product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (product.description && product.description.toLowerCase().includes(searchQuery.toLowerCase()))
     return priceMatch && searchMatch
+  }).sort((a, b) => {
+    const priceA = a.currentPrice || a.discountPrice || a.regularPrice || a.price || 0
+    const priceB = b.currentPrice || b.discountPrice || b.regularPrice || b.price || 0
+    
+    switch (sortBy) {
+      case 'price-low':
+        return priceA - priceB
+      case 'price-high':
+        return priceB - priceA
+      case 'rating':
+        const ratingA = a.rating || 0
+        const ratingB = b.rating || 0
+        return ratingB - ratingA
+      case 'newest':
+        const dateA = new Date(a.createdAt || a.updatedAt || 0)
+        const dateB = new Date(b.createdAt || b.updatedAt || 0)
+        return dateB - dateA
+      case 'popular':
+      default:
+        // For popular, we can use a combination of rating and some other factors
+        // For now, let's use rating as primary factor, then price as secondary
+        const ratingDiff = (b.rating || 0) - (a.rating || 0)
+        if (ratingDiff !== 0) return ratingDiff
+        return priceA - priceB // Lower price first if ratings are equal
+    }
   })
 
-  console.log('Store component about to render, products:', (products || []).length)
-  console.log('Selected category:', selectedCategory)
-  console.log('Filtered products:', filteredProducts.length)
-  console.log('Categories available:', categories.length)
   
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50">
+    <div className="min-h-screen bg-gradient-to-br from-forest-green-50 via-cream-100 to-forest-green-100 relative overflow-hidden">
+      {/* Background decorative elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {/* Left side circles - spaced vertically */}
+        <div className="absolute top-16 -left-32 w-72 h-72 bg-forest-green-200 rounded-full opacity-18 animate-pulse"></div>
+        <div className="absolute top-1/3 -left-24 w-56 h-56 bg-forest-green-100 rounded-full opacity-15 animate-pulse delay-800"></div>
+        <div className="absolute top-2/3 -left-40 w-64 h-64 bg-forest-green-300 rounded-full opacity-16 animate-pulse delay-1200"></div>
+        <div className="absolute bottom-20 -left-28 w-48 h-48 bg-forest-green-200 rounded-full opacity-14 animate-pulse delay-400"></div>
+        
+        {/* Right side circles - spaced vertically */}
+        <div className="absolute top-24 -right-36 w-68 h-68 bg-forest-green-100 rounded-full opacity-17 animate-pulse delay-600"></div>
+        <div className="absolute top-1/4 -right-44 w-76 h-76 bg-forest-green-200 rounded-full opacity-19 animate-pulse delay-1000"></div>
+        <div className="absolute top-3/4 -right-32 w-52 h-52 bg-forest-green-300 rounded-full opacity-13 animate-pulse delay-1400"></div>
+        <div className="absolute bottom-16 -right-48 w-60 h-60 bg-forest-green-100 rounded-full opacity-15 animate-pulse delay-200"></div>
+        
+        {/* Additional side circles - smaller sizes */}
+        <div className="absolute top-1/2 -left-20 w-40 h-40 bg-forest-green-200 rounded-full opacity-12 animate-pulse delay-1600"></div>
+        <div className="absolute top-1/6 -right-28 w-44 h-44 bg-forest-green-300 rounded-full opacity-11 animate-pulse delay-1800"></div>
+        <div className="absolute bottom-1/3 -left-36 w-36 h-36 bg-forest-green-100 rounded-full opacity-10 animate-pulse delay-300"></div>
+        <div className="absolute bottom-1/4 -right-20 w-32 h-32 bg-forest-green-200 rounded-full opacity-9 animate-pulse delay-1100"></div>
+      </div>
       {/* Hero Section */}
-      <section className="bg-gradient-to-r from-forest-green-600 to-forest-green-700 text-cream-100 py-16">
+      <section className="bg-gradient-to-r from-forest-green-600 to-forest-green-700 text-cream-100 py-16 relative z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
@@ -1046,7 +1087,7 @@ const Store = () => {
         </motion.div>
       )}
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
         <div className="flex flex-col lg:flex-row gap-8">
           {/* Sidebar removed for cleaner layout */}
 
@@ -1115,10 +1156,28 @@ const Store = () => {
             </div>
 
             {/* Products Grid */}
-            {/* Products Grid */}
             {loading ? (
               <div className="col-span-full flex justify-center items-center py-20">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
+                <p className="ml-4">Loading products...</p>
+              </div>
+            ) : filteredProducts.length === 0 ? (
+              <div className="col-span-full flex flex-col justify-center items-center py-20">
+                <div className="text-6xl mb-4">🛒</div>
+                <h3 className="text-2xl font-bold text-gray-600 mb-2">No products found</h3>
+                <p className="text-gray-500 mb-4">Try refreshing the page or check your connection</p>
+                <button 
+                  onClick={() => window.location.reload()} 
+                  className="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600"
+                >
+                  Refresh Page
+                </button>
+                <div className="mt-4 text-sm text-gray-400">
+                  <p>Debug info:</p>
+                  <p>Products loaded: {products.length}</p>
+                  <p>Categories: {categories.length}</p>
+                  <p>Loading: {loading.toString()}</p>
+                </div>
               </div>
             ) : (
               <div className={`grid gap-4 ${
@@ -1127,20 +1186,28 @@ const Store = () => {
                   : 'grid-cols-1'
               }`}>
                 {filteredProducts.map((product, index) => (
-                <motion.div
+                <Link
                   key={product._id}
-                  initial={{ opacity: 0, y: 30 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: index * 0.1 }}
-                  className={`bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300 group relative ${
-                    viewMode === 'list' ? 'flex' : 'flex flex-col h-[360px]'
-                  } ${
-                    highlightedProductId === product._id ? 'ring-4 ring-blue-500 ring-opacity-50 shadow-2xl' : ''
-                  }`}
+                  to={`/product/${product._id}`}
+                  className="block"
                 >
+                  <motion.div
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: index * 0.1 }}
+                    className={`bg-white/80 backdrop-blur-sm rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300 group relative border border-white/20 cursor-pointer ${
+                      viewMode === 'list' ? 'flex' : 'flex flex-col h-[360px]'
+                    } ${
+                      highlightedProductId === product._id ? 'ring-4 ring-blue-500 ring-opacity-50 shadow-2xl' : ''
+                    }`}
+                  >
                   {/* Wishlist Button - Positioned relative to main card */}
                   <button 
-                    onClick={() => isInWishlist(product._id) ? removeFromWishlist(product._id) : addToWishlist(product)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      isInWishlist(product._id) ? removeFromWishlist(product._id) : addToWishlist(product);
+                    }}
                     className={`absolute top-2 right-2 p-2 rounded-full transition-all duration-300 z-50 opacity-0 group-hover:opacity-100 ${
                       isInWishlist(product._id) 
                         ? 'bg-red-500 text-white shadow-lg' 
@@ -1172,6 +1239,41 @@ const Store = () => {
                         <span className="px-2 py-1 bg-red-500 text-white text-xs font-semibold rounded">
                           {Math.round(((product.regularPrice - product.discountPrice) / product.regularPrice) * 100)}% OFF
                         </span>
+                      )}
+                      {/* Display applied discount names */}
+                      {product.appliedDiscounts && product.appliedDiscounts.length > 0 && (
+                        <div className="flex flex-col space-y-1">
+                          {product.appliedDiscounts.slice(0, 2).map((discount, idx) => {
+                            const now = new Date();
+                            const startDate = new Date(discount.discountId?.startDate || discount.startDate);
+                            const endDate = new Date(discount.discountId?.endDate || discount.endDate);
+                            const isActive = now >= startDate && now <= endDate;
+                            const isUpcoming = now < startDate;
+                            
+                            return (
+                              <span 
+                                key={idx} 
+                                className={`px-2 py-1 text-white text-xs font-semibold rounded ${
+                                  isActive ? 'bg-green-500' : 
+                                  isUpcoming ? 'bg-blue-500' : 'bg-gray-500'
+                                }`}
+                                title={
+                                  isActive ? 'Active discount' : 
+                                  isUpcoming ? `Starts ${startDate.toLocaleDateString()}` : 
+                                  'Expired discount'
+                                }
+                              >
+                                {discount.discountName || discount.discountId?.name}
+                                {isUpcoming && ' (Upcoming)'}
+                              </span>
+                            );
+                          })}
+                          {product.appliedDiscounts.length > 2 && (
+                            <span className="px-2 py-1 bg-purple-600 text-white text-xs font-semibold rounded">
+                              +{product.appliedDiscounts.length - 2} more
+                            </span>
+                          )}
+                        </div>
                       )}
                     </div>
                   </ProductImageSlideshow>
@@ -1229,15 +1331,15 @@ const Store = () => {
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center space-x-1">
                         <span className="text-lg font-bold text-forest-green-800">
-                          ₹{(product.discountPrice || product.regularPrice || product.price || 0).toLocaleString()}
+                          ₹{(product.currentPrice || product.discountPrice || product.regularPrice || product.price || 0).toLocaleString()}
                         </span>
-                        {product.discountPrice && product.regularPrice ? (
+                        {(product.currentPrice || product.discountPrice) && product.regularPrice ? (
                           <>
                             <span className="text-xs text-forest-green-400 line-through">
                               ₹{(product.regularPrice || 0).toLocaleString()}
                             </span>
                             <span className="text-xs bg-red-100 text-red-600 px-1 py-0.5 rounded">
-                              {Math.round(((product.regularPrice - product.discountPrice) / product.regularPrice) * 100)}% OFF
+                              {Math.round(((product.regularPrice - (product.currentPrice || product.discountPrice)) / product.regularPrice) * 100)}% OFF
                             </span>
                           </>
                         ) : null}
@@ -1254,7 +1356,11 @@ const Store = () => {
                     {/* Add to Cart Button */}
                     <div className="mt-auto">
                       <button
-                        onClick={() => addToCart(product)}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          addToCart(product);
+                        }}
                         disabled={product.stock <= 0}
                         className={`px-3 py-1.5 rounded-lg font-medium transition-colors w-full text-sm ${
                           product.stock > 0
@@ -1274,6 +1380,7 @@ const Store = () => {
                     </div>
                   </div>
                 </motion.div>
+                </Link>
               ))}
               </div>
             )}
@@ -1305,7 +1412,9 @@ const Store = () => {
             {!hasMoreProducts && products.length > 0 && (
               <div className="text-center mt-12 py-8 bg-gradient-to-r from-forest-green-50 to-cream-50 rounded-2xl border border-forest-green-100">
                 <div className="max-w-md mx-auto">
-                  <div className="text-6xl mb-4">🌱</div>
+                  <div className="mb-4">
+                    <Logo size="2xl" />
+                  </div>
                   <h3 className="text-2xl font-bold text-forest-green-800 mb-2">Thank you for choosing us!</h3>
                   <p className="text-forest-green-600 mb-4">
                     We hope you found what you were looking for.
@@ -1325,7 +1434,7 @@ const Store = () => {
       {/* Cart Modal */}
       {showCart && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-white/20">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold text-gray-900">Shopping Cart</h2>
@@ -1415,7 +1524,7 @@ const Store = () => {
       {/* Checkout Modal */}
       {showCheckout && user && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-white/20">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold text-gray-900">Checkout</h2>
@@ -1611,7 +1720,7 @@ const Store = () => {
       {/* Order Summary Modal for COD */}
       {showOrderSummary && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-white/20">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold text-gray-900">Order Summary</h2>
@@ -1763,7 +1872,7 @@ const Store = () => {
                 stiffness: 300,
                 mass: 0.8
               }}
-              className="fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-50 overflow-hidden"
+              className="fixed top-0 right-0 h-full w-full max-w-md bg-white/90 backdrop-blur-xl shadow-2xl z-50 overflow-hidden border-l border-white/20"
             >
             <div className="flex flex-col h-full">
               {/* Header */}
@@ -1859,9 +1968,9 @@ const Store = () => {
                             <div className="flex items-center justify-between">
                               <div className="flex items-center space-x-2">
                                 <span className="text-sm font-bold text-forest-green-800">
-                                  ₹{(item.discountPrice || item.regularPrice || item.price || 0).toLocaleString()}
+                                  ₹{(item.currentPrice || item.discountPrice || item.regularPrice || item.price || 0).toLocaleString()}
                                 </span>
-                                {item.discountPrice && item.regularPrice && (
+                                {(item.currentPrice || item.discountPrice) && item.regularPrice && (
                                   <span className="text-xs text-gray-400 line-through">
                                     ₹{(item.regularPrice || 0).toLocaleString()}
                                   </span>

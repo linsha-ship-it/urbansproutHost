@@ -5,6 +5,7 @@ const path = require('path');
 const http = require('http');
 const connectDB = require('./config/database');
 const setupSocketIO = require('./utils/socketIO');
+const discountLifecycleService = require('./services/discountLifecycleService');
 
 // Load env from project root first (for MONGODB_URI), then server/.env for others
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
@@ -25,10 +26,41 @@ const defaultAllowedOrigins = [
   'http://127.0.0.1:5174',
   'http://127.0.0.1:5175'
 ];
-const allowedOrigins = (process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : defaultAllowedOrigins);
+const envOrigins = (process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : []);
+const normalizedEnvOrigins = envOrigins.map(o => o && o.trim()).filter(Boolean);
+const allowedOrigins = Array.from(new Set([ ...defaultAllowedOrigins, ...normalizedEnvOrigins ]));
+
+// Ensure Access-Control-Allow-Origin is always sent for allowed origins (placed BEFORE cors())
+app.use((req, res, next) => {
+  const requestOrigin = req.headers.origin;
+  if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
+    if (!res.get('Access-Control-Allow-Origin')) {
+      res.header('Access-Control-Allow-Origin', requestOrigin);
+    }
+    // Keep credentials aligned with CORS config
+    if (!res.get('Access-Control-Allow-Credentials')) {
+      res.header('Access-Control-Allow-Credentials', 'true');
+    }
+  }
+  // Quick response for OPTIONS if not handled yet
+  if (req.method === 'OPTIONS') {
+    res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With');
+    return res.sendStatus(204);
+  }
+  next();
+});
 
 app.use(cors({
-  origin: allowedOrigins,
+  origin: function(origin, callback) {
+    if (!origin) return callback(null, true); // allow non-browser requests
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    // In development, be lenient to avoid blocking
+    if ((process.env.NODE_ENV || 'development') === 'development') {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
@@ -64,11 +96,16 @@ const notificationRoutes = require('./routes/notifications');
 const plantRoutes = require('./routes/plants');
 const gardenRoutes = require('./routes/garden');
 const statsRoutes = require('./routes/stats');
+const profilePhotoRoutes = require('./routes/profilePhoto');
 
 // Use routes
 app.use('/api/auth', authRoutes);
 app.use('/api/blog', blogRoutes);
 app.use('/api/store', storeRoutes);
+// Debug route for inventory insights (no auth required)
+const { getInventoryInsightsDebug } = require('./controllers/adminController');
+app.get('/api/admin/inventory-insights-debug', getInventoryInsightsDebug);
+
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin/auth', adminAuthRoutes);
 app.use('/api/chatbot', chatbotRoutes);
@@ -76,6 +113,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/plants', plantRoutes);
 app.use('/api/garden', gardenRoutes);
 app.use('/api/stats', statsRoutes);
+app.use('/api/profile-photo', profilePhotoRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -125,6 +163,9 @@ function startServer(port, attemptsLeft = 3) {
     console.log(`🚀 Server running on port ${port}`);
     console.log(`📡 Socket.IO server initialized`);
     console.log(`🌱 UrbanSprout Backend is ready!`);
+    
+    // Start discount lifecycle service
+    discountLifecycleService.start();
   });
 
   server.on('error', (err) => {

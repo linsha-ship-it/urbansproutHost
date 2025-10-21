@@ -134,10 +134,24 @@ const deleteNotification = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Clear all notifications
+// @route   DELETE /api/notifications/clear-all
+// @access  Private
+const clearAllNotifications = asyncHandler(async (req, res) => {
+  const result = await Notification.deleteMany({ userId: req.user._id });
+  
+  res.json({
+    success: true,
+    message: `All notifications cleared successfully`,
+    data: { deletedCount: result.deletedCount }
+  });
+});
+
 router.get('/', getUserNotifications);
 router.get('/unread-count', getUnreadCount);
-router.put('/:id/read', markAsRead);
 router.put('/read-all', markAllAsRead);
+router.delete('/clear-all', clearAllNotifications);
+router.put('/:id/read', markAsRead);
 router.delete('/:id', deleteNotification);
 
 module.exports = router;

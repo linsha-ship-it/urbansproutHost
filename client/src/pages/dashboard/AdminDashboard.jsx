@@ -18,7 +18,7 @@ const AdminDashboard = () => {
     loadDashboardData();
     
     // Connect to Socket.IO for real-time updates
-    const socket = io('http://localhost:5001', {
+    const socket = io('http://localhost:5002', {
       auth: {
         token: localStorage.getItem('token')
       }
@@ -87,7 +87,7 @@ const AdminDashboard = () => {
   const getActivityIcon = (iconType) => {
     switch (iconType) {
       case 'users':
-        return <FaUsers className="text-green-600 text-sm" />;
+        return <FaUsers className="text-forest-green-500 text-sm" />;
       case 'shopping-bag':
         return <FaShoppingBag className="text-blue-600 text-sm" />;
       case 'file-text':
@@ -100,7 +100,7 @@ const AdminDashboard = () => {
   const getActivityIconBg = (iconType) => {
     switch (iconType) {
       case 'users':
-        return 'bg-green-100';
+        return 'bg-forest-green-100';
       case 'shopping-bag':
         return 'bg-blue-100';
       case 'file-text':
@@ -119,10 +119,16 @@ const AdminDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-forest-green-50 via-cream-100 to-forest-green-100 relative overflow-hidden">
+      {/* Background decorative elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-forest-green-200 rounded-full opacity-20 animate-pulse"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-cream-300 rounded-full opacity-20 animate-pulse delay-1000"></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-forest-green-100 rounded-full opacity-10 animate-pulse delay-500"></div>
+      </div>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
         {/* Welcome Section */}
         <div className="bg-gradient-to-r from-red-500 to-pink-600 rounded-lg p-6 text-white mb-8">
           <h2 className="text-2xl font-bold mb-2">Admin Dashboard 👑</h2>
@@ -147,8 +153,8 @@ const AdminDashboard = () => {
 
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center">
-              <div className="bg-green-100 p-3 rounded-lg">
-                <FaShoppingBag className="text-green-600 text-xl" />
+              <div className="bg-forest-green-100 p-3 rounded-lg">
+                <FaShoppingBag className="text-forest-green-500 text-xl" />
               </div>
               <div className="ml-4">
                 <h3 className="text-2xl font-bold text-gray-900">{stats?.totalOrders || 0}</h3>
@@ -196,8 +202,8 @@ const AdminDashboard = () => {
 
           <button className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow text-left">
             <div className="flex items-center mb-4">
-              <div className="bg-green-100 p-3 rounded-lg">
-                <FaStore className="text-green-600 text-xl" />
+              <div className="bg-forest-green-100 p-3 rounded-lg">
+                <FaStore className="text-forest-green-500 text-xl" />
               </div>
               <h3 className="text-lg font-semibold text-gray-900 ml-4">Vendor Approval</h3>
             </div>
@@ -251,13 +257,13 @@ const AdminDashboard = () => {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-gray-700">Server Status</span>
-                <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">
+                <span className="px-2 py-1 text-xs bg-forest-green-100 text-forest-green-800 rounded-full">
                   Healthy
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-700">Database</span>
-                <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">
+                <span className="px-2 py-1 text-xs bg-forest-green-100 text-forest-green-800 rounded-full">
                   Connected
                 </span>
               </div>

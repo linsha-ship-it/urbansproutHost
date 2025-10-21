@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { apiCall } from '@/utils/api'
+import Logo from './components/Logo'
 
 const UrbanSproutLanding = () => {
   const [isScrolled, setIsScrolled] = useState(false)
@@ -134,18 +135,23 @@ const UrbanSproutLanding = () => {
       {/* Header */}
       <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ease-in-out transform ${
         isScrolled 
-          ? 'bg-gradient-to-r from-green-50/95 via-emerald-50/95 to-teal-50/95 backdrop-blur-md shadow-lg translate-y-0' 
+          ? 'bg-gradient-to-r from-forest-green-50/95 via-forest-green-100/95 to-forest-green-50/95 backdrop-blur-md shadow-lg translate-y-0' 
           : 'bg-transparent translate-y-0'
       } ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
             {/* Logo - Left */}
             <div className="flex-shrink-0 navbar-logo">
-              <h1 className={`text-2xl font-bold transition-all duration-500 ease-in-out transform ${
-                isScrolled ? 'text-gray-900 scale-100' : 'text-gray-900 scale-105'
-              }`}>
-                UrbanSprout
-              </h1>
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-full overflow-hidden shadow-lg bg-white">
+                  <Logo size="md" className="w-full h-full object-cover" />
+                </div>
+                <h1 className={`text-2xl font-bold transition-all duration-500 ease-in-out transform ${
+                  isScrolled ? 'text-gray-900 scale-100' : 'text-gray-900 scale-105'
+                }`}>
+                  UrbanSprout
+                </h1>
+              </div>
             </div>
 
             {/* Center Navigation */}
@@ -180,17 +186,17 @@ const UrbanSproutLanding = () => {
             </nav>
 
             {/* Right Side Navigation */}
-            <nav className="hidden md:flex items-center space-x-4">
+            <nav className="hidden md:flex items-center space-x-8">
               <a 
                 href="/login" 
-                className={`navbar-item nav-link text-sm font-medium transition-all duration-300 ease-in-out hover:text-green-500 hover:scale-105 transform hover:shadow-sm ${
+                className={`navbar-item nav-link text-sm font-medium transition-all duration-300 ease-in-out hover:text-forest-green-800 hover:scale-105 transform hover:shadow-sm ${
                   isScrolled ? 'text-gray-700' : 'text-gray-700'
                 }`}
                 style={{ animationDelay: '0.4s' }}
               >
                 Login
               </a>
-              <a href="/signup" className="navbar-signup bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ease-in-out transform hover:scale-105 hover:shadow-lg hover:-translate-y-0.5" style={{ animationDelay: '0.5s' }}>
+              <a href="/signup" className="navbar-signup bg-gradient-to-r from-forest-green-600 to-forest-green-700 hover:from-forest-green-700 hover:to-forest-green-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ease-in-out transform hover:scale-105 hover:shadow-lg hover:-translate-y-0.5" style={{ animationDelay: '0.5s' }}>
                 Sign Up
               </a>
             </nav>
@@ -210,20 +216,20 @@ const UrbanSproutLanding = () => {
       </header>
 
       {/* Hero Section */}
-      <section className="relative min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50">
+      <section className="relative min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 pt-[82px]">
         <div className="absolute inset-0 bg-gradient-to-br from-amber-100/30 via-orange-100/30 to-yellow-100/30"></div>
         <div className="relative z-10 text-center px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto">
           <h1 className="text-5xl sm:text-6xl lg:text-7xl font-semibold text-gray-900 mb-6 leading-tight tracking-tight fk-grotesk">
             Grow Your Garden,<br />
-            <span className="text-green-600">No Matter the Concrete.</span>
+            <span className="bg-gradient-to-r from-forest-green-600 to-forest-green-700 bg-clip-text text-transparent">No Matter the Concrete.</span>
           </h1>
           <p className="text-xl sm:text-2xl text-gray-700 mb-8 max-w-3xl mx-auto leading-relaxed">
             Your personal guide to planting success, tailored to your available space, time, and sunlight conditions.
           </p>
           <div className="flex justify-center items-center">
-            <button className="bg-green-500 hover:bg-green-600 text-white px-8 py-4 rounded-lg text-lg font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg">
+            <a href="/signup" className="bg-gradient-to-r from-forest-green-600 to-forest-green-700 hover:from-forest-green-700 hover:to-forest-green-800 text-white px-8 py-4 rounded-lg text-lg font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg">
               Start Planting Today
-            </button>
+            </a>
           </div>
         </div>
       </section>
@@ -242,7 +248,7 @@ const UrbanSproutLanding = () => {
               Real stories from our growing community across India who are transforming their urban spaces into thriving green sanctuaries with UrbanSprout.
             </p>
             <a href="/signup" className="inline-block bg-white hover:bg-gray-50 text-gray-900 px-8 py-3 rounded-lg font-medium transition-colors duration-300 transform hover:scale-105 hover:shadow-lg border border-gray-200">
-              🌱 Join Our Community
+              Join Our Community
             </a>
           </div>
           
@@ -351,7 +357,7 @@ const UrbanSproutLanding = () => {
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="text-center">
-              <div className="text-4xl sm:text-5xl font-bold text-green-600 mb-2">
+              <div className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-forest-green-600 to-forest-green-700 bg-clip-text text-transparent mb-2">
                 {communityStats.totalUsers > 0 ? `${communityStats.totalUsers.toLocaleString()}+` : 'Loading...'}
               </div>
               <div className="text-lg font-semibold text-gray-900 mb-1">Urban Gardeners</div>
@@ -359,7 +365,7 @@ const UrbanSproutLanding = () => {
             </div>
             
             <div className="text-center">
-              <div className="text-4xl sm:text-5xl font-bold text-green-600 mb-2">
+              <div className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-forest-green-600 to-forest-green-700 bg-clip-text text-transparent mb-2">
                 {communityStats.citiesCount > 0 ? `${communityStats.citiesCount}+` : 'Loading...'}
               </div>
               <div className="text-lg font-semibold text-gray-900 mb-1">Cities Reached</div>
@@ -367,7 +373,7 @@ const UrbanSproutLanding = () => {
             </div>
             
             <div className="text-center">
-              <div className="text-4xl sm:text-5xl font-bold text-green-600 mb-2">
+              <div className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-forest-green-600 to-forest-green-700 bg-clip-text text-transparent mb-2">
                 {communityStats.totalPlants > 0 ? `${communityStats.totalPlants.toLocaleString()}+` : 'Loading...'}
               </div>
               <div className="text-lg font-semibold text-gray-900 mb-1">Plant Suggestions</div>
@@ -393,7 +399,7 @@ const UrbanSproutLanding = () => {
                 Stop dreaming about fresh herbs and start growing them today. Every seed you plant today becomes tomorrow's harvest. UrbanSprout gives you the tools, knowledge, and community to turn your balcony into a thriving garden right now.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
-                <a href="/signup" className="bg-green-500 hover:bg-green-600 text-white px-8 py-4 rounded-lg text-lg font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg text-center">
+                <a href="/signup" className="bg-gradient-to-r from-forest-green-600 to-forest-green-700 hover:from-forest-green-700 hover:to-forest-green-800 text-white px-8 py-4 rounded-lg text-lg font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg text-center">
                   Take Your First Step
                 </a>
               </div>
@@ -451,14 +457,14 @@ const UrbanSproutLanding = () => {
               UrbanSprout
             </h3>
             <p className="text-gray-400">
-              © 2024 UrbanSprout. All rights reserved.
+              © 2025 UrbanSprout. All rights reserved.
             </p>
           </div>
         </div>
       </footer>
 
       {/* Custom CSS for scrolling animation and fonts */}
-      <style jsx>{`
+      <style>{`
         @font-face {
           font-family: 'FK Grotesk Neue';
           src: url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');

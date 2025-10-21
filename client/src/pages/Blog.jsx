@@ -58,7 +58,7 @@ const PostCard = ({
       <div className="flex items-center space-x-2">
         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
           post.tag === 'Question' ? 'bg-blue-100 text-blue-700' : 
-          post.tag === 'Success Story' ? 'bg-green-100 text-green-700' :
+          post.tag === 'Success Story' ? 'bg-forest-green-100 text-forest-green-700' :
           'bg-orange-100 text-orange-700'
         }`}>
           {post.tag}
@@ -110,7 +110,7 @@ const PostCard = ({
       {showReadMore && (
         <button
           onClick={toggleExpanded}
-          className="text-green-600 hover:text-green-700 text-sm font-medium mt-1 transition-colors"
+          className="text-forest-green-600 hover:text-forest-green-800 text-sm font-medium mt-1 transition-colors"
         >
           {isExpanded ? 'Read less' : 'Read more'}
         </button>
@@ -133,7 +133,7 @@ const PostCard = ({
       {post.hashtags.map((tag, index) => (
         <span 
           key={index}
-          className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs hover:bg-green-100 hover:text-green-700 cursor-pointer transition-colors"
+          className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs hover:bg-forest-green-100 hover:text-forest-green-800 cursor-pointer transition-colors"
         >
           {tag}
         </span>
@@ -178,7 +178,7 @@ const PostCard = ({
           onClick={() => handleSharePost(post)}
           disabled={!user}
           className={`flex items-center space-x-2 transition-colors ${
-            !user ? 'opacity-50 cursor-not-allowed' : 'text-gray-500 hover:text-green-500'
+            !user ? 'opacity-50 cursor-not-allowed' : 'text-gray-500 hover:text-forest-green-600'
           }`}
         >
           <FaShare />
@@ -190,7 +190,7 @@ const PostCard = ({
           onClick={() => handleBookmarkPost(post.id)}
           disabled={!user}
           className={`flex items-center space-x-2 transition-colors ${
-            post.bookmarked ? 'text-green-500' : 'text-gray-500 hover:text-green-500'
+            post.bookmarked ? 'text-forest-green-600' : 'text-gray-500 hover:text-forest-green-600'
           } ${!user ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           <FaBookmark className={post.bookmarked ? 'fill-current' : ''} />
@@ -211,7 +211,7 @@ const PostCard = ({
                 placeholder="Write a comment..."
                 value={newComment[post.id] || ''}
                 onChange={(e) => setNewComment(prev => ({ ...prev, [post.id]: e.target.value }))}
-                className="flex-1 px-4 py-2 border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                className="flex-1 px-4 py-2 border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-forest-green-600 focus:border-transparent"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault()
@@ -222,7 +222,7 @@ const PostCard = ({
               <button
                 type="button"
                 onClick={() => handleAddCommentToPost(post.id, newComment[post.id])}
-                className="px-4 py-2 bg-green-500 text-white rounded-full hover:bg-green-600 transition-colors"
+                className="px-4 py-2 bg-forest-green-600 text-white rounded-full hover:bg-forest-green-700 transition-colors"
               >
                 <FaPaperPlane className="w-4 h-4" />
               </button>
@@ -370,9 +370,9 @@ const Blog = () => {
         const transformedPosts = backendPosts.map(post => ({
           id: post._id || post.id,
           user: {
-            name: post.author || 'Anonymous',
-            username: `@${(post.author || 'user').toLowerCase().replace(' ', '_')}`,
-            avatar: null
+            name: post.authorId?.name || post.author || 'Anonymous',
+            username: `@${(post.authorId?.name || post.author || 'user').toLowerCase().replace(' ', '_')}`,
+            avatar: post.authorId?.avatar || null
           },
           timeAgo: formatTimeAgo(post.createdAt),
           tag: post.category === 'success_story' ? 'Success Story' : post.category === 'question' ? 'Question' : '',
@@ -475,9 +475,9 @@ const Blog = () => {
         const transformedPosts = backendPosts.map(post => ({
           id: post._id || post.id,
           user: {
-            name: post.author || 'Anonymous',
-            username: `@${(post.author || 'user').toLowerCase().replace(' ', '_')}`,
-            avatar: null
+            name: post.authorId?.name || post.author || 'Anonymous',
+            username: `@${(post.authorId?.name || post.author || 'user').toLowerCase().replace(' ', '_')}`,
+            avatar: post.authorId?.avatar || null
           },
           timeAgo: formatTimeAgo(post.createdAt),
           tag: post.category === 'success_story' ? 'Success Story' : post.category === 'question' ? 'Question' : '',
@@ -571,8 +571,8 @@ const Blog = () => {
   const loadTrendingHashtags = async () => {
     try {
       const response = await apiCall('/blog/trending-hashtags?limit=5')
-      if (response.success && response.data) {
-        setTrendingHashtags(response.data)
+      if (response.success && response.data && response.data.hashtags) {
+        setTrendingHashtags(response.data.hashtags)
       }
     } catch (error) {
       console.error('Error loading trending hashtags:', error)
@@ -584,8 +584,8 @@ const Blog = () => {
   const loadTopContributors = async () => {
     try {
       const response = await apiCall('/blog/top-contributors?limit=4')
-      if (response.success && response.data) {
-        setTopContributors(response.data)
+      if (response.success && response.data && response.data.contributors) {
+        setTopContributors(response.data.contributors)
       }
     } catch (error) {
       console.error('Error loading top contributors:', error)
@@ -828,11 +828,17 @@ const Blog = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50">
+    <div className="min-h-screen bg-gradient-to-br from-forest-green-50 via-cream-100 to-forest-green-100 relative overflow-hidden">
+      {/* Background decorative elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-forest-green-200 rounded-full opacity-20 animate-pulse"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-cream-300 rounded-full opacity-20 animate-pulse delay-1000"></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-forest-green-100 rounded-full opacity-10 animate-pulse delay-500"></div>
+      </div>
       
       {/* Signup Banner for non-authenticated users */}
       {!user && (
-        <div className="bg-gradient-to-r from-green-500 to-blue-600 text-white py-3">
+        <div className="bg-gradient-to-r from-forest-green-500 to-blue-600 text-white py-3">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between">
               <div className="flex items-center">
@@ -843,7 +849,7 @@ const Blog = () => {
               </div>
               <a 
                 href="/signup" 
-                className="bg-white text-green-600 px-4 py-1 rounded-full text-sm font-medium hover:bg-gray-100 transition-colors"
+                className="bg-white text-forest-green-500 px-4 py-1 rounded-full text-sm font-medium hover:bg-gray-100 transition-colors"
               >
                 Sign Up Now
               </a>
@@ -852,9 +858,9 @@ const Blog = () => {
         </div>
       )}
       
-      {/* Search Bar */}
-      <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-yellow-50 border-b border-gray-200 py-4">
-        <div className="w-full px-6 sm:px-8 lg:px-12 xl:px-16">
+      {/* Search Bar and Content */}
+      <div className="bg-gradient-to-r from-forest-green-50 via-cream-100 to-forest-green-100 relative z-10 pt-16">
+        <div className="w-full px-6 sm:px-8 lg:px-12 xl:px-16 py-4">
           <div className="relative max-w-2xl mx-auto">
             <FaSearch className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
             <input
@@ -870,50 +876,49 @@ const Blog = () => {
                 }, 500)
                 setSearchTimeout(timeout)
               }}
-              className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+              className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-forest-green-500 focus:border-transparent text-sm"
             />
           </div>
         </div>
-      </div>
 
-      {/* Read-only banner for unauthenticated users */}
-      {!user && (
-        <div className="w-full px-6 sm:px-8 lg:px-12 xl:px-16 py-4">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="flex-shrink-0">
-                  <FaUsers className="h-6 w-6 text-blue-600" />
+        {/* Read-only banner for unauthenticated users */}
+        {!user && (
+          <div className="w-full px-6 sm:px-8 lg:px-12 xl:px-16 py-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="flex-shrink-0">
+                    <FaUsers className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-blue-800">
+                      You're viewing the blog in read-only mode
+                    </h3>
+                    <p className="text-sm text-blue-600">
+                      Sign up to create posts, comment, like, and join our gardening community!
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-sm font-medium text-blue-800">
-                    You're viewing the blog in read-only mode
-                  </h3>
-                  <p className="text-sm text-blue-600">
-                    Sign up to create posts, comment, like, and join our gardening community!
-                  </p>
+                <div className="flex space-x-2">
+                  <a
+                    href="/signup"
+                    className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Sign Up
+                  </a>
+                  <a
+                    href="/login"
+                    className="px-4 py-2 border border-blue-600 text-blue-600 text-sm rounded-lg hover:bg-blue-50 transition-colors"
+                  >
+                    Login
+                  </a>
                 </div>
-              </div>
-              <div className="flex space-x-2">
-                <a
-                  href="/signup"
-                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Sign Up
-                </a>
-                <a
-                  href="/login"
-                  className="px-4 py-2 border border-blue-600 text-blue-600 text-sm rounded-lg hover:bg-blue-50 transition-colors"
-                >
-                  Login
-                </a>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <div className="w-full px-6 sm:px-8 lg:px-12 xl:px-16 py-6">
+        <div className="w-full px-6 sm:px-8 lg:px-12 xl:px-16 py-6">
         <div className="grid grid-cols-1 md:grid-cols-12 lg:grid-cols-12 xl:grid-cols-10 gap-4 md:gap-6">
           {/* Left Sidebar */}
           <div className="md:col-span-4 lg:col-span-2 xl:col-span-2 order-1">
@@ -927,7 +932,7 @@ const Blog = () => {
                       onClick={() => setActiveFilter(item.name)}
                       className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors ${
                         activeFilter === item.name
-                          ? 'bg-green-50 text-green-700 border border-green-200'
+                          ? 'bg-forest-green-50 text-forest-green-700 border border-forest-green-200'
                           : 'text-gray-700 hover:bg-gray-50'
                       }`}
                     >
@@ -936,7 +941,7 @@ const Blog = () => {
                         <span className="font-medium text-sm">{item.name}</span>
                       </div>
                       {item.count && (
-                        <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+                        <span className="px-2 py-1 bg-forest-green-100 text-forest-green-700 text-xs font-medium rounded-full">
                           {item.count}
                         </span>
                       )}
@@ -946,15 +951,15 @@ const Blog = () => {
               </div>
 
               {/* Blog Stats */}
-              <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-xl shadow-sm p-4 text-white">
+              <div className="bg-gradient-to-r from-forest-green-600 to-forest-green-700 rounded-xl shadow-sm p-4 text-white">
                 <h3 className="font-bold text-base mb-3">Blog Community</h3>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-green-100">Total Readers</span>
+                    <span className="text-forest-green-100">Total Readers</span>
                     <span className="font-bold text-xl">{blogStats.totalMembers.toLocaleString()}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-green-100">Active Today</span>
+                    <span className="text-forest-green-100">Active Today</span>
                     <span className="font-bold text-xl">{blogStats.activeToday.toLocaleString()}</span>
                   </div>
                   </div>
@@ -968,7 +973,7 @@ const Blog = () => {
                 </p>
                 <button 
                   onClick={() => setShowGuidelines(true)}
-                  className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                  className="w-full px-4 py-2 bg-forest-green-100 text-forest-green-800 rounded-lg hover:bg-forest-green-200 transition-colors font-medium"
                 >
                   Read Full Guidelines
                 </button>
@@ -988,7 +993,7 @@ const Blog = () => {
                     onClick={() => setActiveFilter(filter)}
                     className={`px-3 md:px-4 py-1.5 md:py-2 rounded-full text-xs md:text-sm font-medium transition-colors ${
                       filter === activeFilter
-                        ? 'bg-green-500 text-white'
+                        ? 'bg-forest-green-600 text-white'
                         : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
                     }`}
                   >
@@ -1002,7 +1007,7 @@ const Blog = () => {
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value)}
-                  className="px-2 md:px-3 py-1.5 md:py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 bg-white text-xs md:text-sm"
+                  className="px-2 md:px-3 py-1.5 md:py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-forest-green-600 bg-white text-xs md:text-sm"
                 >
                   <option value="Newest">Newest</option>
                   <option value="Most Liked">Most Liked</option>
@@ -1015,7 +1020,7 @@ const Blog = () => {
             {/* Message Display */}
             {message && (
               <div className={`mb-4 p-3 rounded-lg text-sm text-center ${
-                message.includes('successfully') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                message.includes('successfully') ? 'bg-forest-green-100 text-forest-green-700' : 'bg-red-100 text-red-700'
               }`}>
                 {message}
               </div>
@@ -1025,7 +1030,7 @@ const Blog = () => {
             <div>
               {loading ? (
                 <div className="flex justify-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-forest-green-600"></div>
                 </div>
               ) : filteredAndSortedPosts.length > 0 ? (
                 filteredAndSortedPosts.map((post) => (
@@ -1062,7 +1067,7 @@ const Blog = () => {
                   {user ? (
                     <button
                       onClick={() => setShowCreatePost(true)}
-                      className="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium"
+                      className="px-6 py-3 bg-forest-green-600 text-white rounded-lg hover:bg-forest-green-700 transition-colors font-medium"
                     >
                       Create First Post
                     </button>
@@ -1070,13 +1075,13 @@ const Blog = () => {
                     <div className="flex justify-center space-x-3">
                       <a
                         href="/signup"
-                        className="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium"
+                        className="px-6 py-3 bg-forest-green-600 text-white rounded-lg hover:bg-forest-green-700 transition-colors font-medium"
                       >
                         Sign Up
                       </a>
                       <a
                         href="/login"
-                        className="px-6 py-3 border border-green-500 text-green-500 rounded-lg hover:bg-green-50 transition-colors font-medium"
+                        className="px-6 py-3 border border-forest-green-600 text-forest-green-600 rounded-lg hover:bg-forest-green-50 transition-colors font-medium"
                       >
                         Login
                       </a>
@@ -1108,7 +1113,7 @@ const Blog = () => {
                         onClick={() => loadPosts(pageNum)}
                         className={`px-3 py-2 text-sm font-medium rounded-md ${
                           currentPage === pageNum
-                            ? 'bg-green-500 text-white'
+                            ? 'bg-forest-green-600 text-white'
                             : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'
                         }`}
                       >
@@ -1136,7 +1141,7 @@ const Blog = () => {
               {/* Trending Hashtags */}
               <div className="bg-white rounded-xl shadow-sm p-4">
                 <h3 className="font-bold text-base mb-3 flex items-center">
-                  <FaHashtag className="mr-2 text-green-500" />
+                  <FaHashtag className="mr-2 text-forest-green-600" />
                   Trending Hashtags
                 </h3>
                 <div className="space-y-2">
@@ -1144,11 +1149,11 @@ const Blog = () => {
                     trendingHashtags.map((item, index) => (
                       <div key={index} className="flex items-center justify-between">
                         <div>
-                          <div className="font-medium text-green-600 text-sm">{item.tag}</div>
-                          <div className="text-xs text-green-500">{item.count} posts</div>
+                          <div className="font-medium text-forest-green-600 text-sm">{item.tag}</div>
+                          <div className="text-xs text-forest-green-600">{item.count} posts</div>
                         </div>
                         <div className={`w-2 h-2 rounded-full ${
-                          item.trend === 'up' ? 'bg-green-500' : 'bg-red-500'
+                          item.trend === 'up' ? 'bg-forest-green-600' : 'bg-red-500'
                         }`}></div>
                       </div>
                     ))
@@ -1177,7 +1182,7 @@ const Blog = () => {
                         <span className={`text-sm font-bold w-4 ${index === 0 ? 'text-yellow-500' : index === 1 ? 'text-gray-400' : index === 2 ? 'text-amber-600' : 'text-gray-600'}`}>
                           {index + 1}.
                         </span>
-                        <Avatar user={{ name: contributor.name }} size="sm" />
+                        <Avatar user={{ name: contributor.name, avatar: contributor.avatar }} size="sm" />
                         <div className="flex-1">
                           <div className="font-medium text-gray-900 text-sm">{contributor.name}</div>
                           <div className="text-xs text-gray-500">{contributor.postCount} posts</div>
@@ -1227,6 +1232,7 @@ const Blog = () => {
             </div>
           </div>
         </div>
+        </div>
       </div>
 
       {/* Floating Create Post Button */}
@@ -1234,7 +1240,7 @@ const Blog = () => {
         <button
           type="button"
           onClick={() => setShowCreatePost(true)}
-          className="fixed bottom-8 right-8 w-14 h-14 bg-green-500 hover:bg-green-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center z-50"
+          className="fixed bottom-8 right-8 w-14 h-14 bg-forest-green-600 hover:bg-forest-green-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center z-50"
         >
           <FaPlus className="w-6 h-6" />
         </button>
@@ -1266,7 +1272,7 @@ const Blog = () => {
                   user: {
                     name: post.author || 'Anonymous',
                     username: `@${(post.author || 'user').toLowerCase().replace(' ', '_')}`,
-                    avatar: null
+                    avatar: post.author?.avatar || null
                   },
                   timeAgo: formatTimeAgo(post.createdAt),
                   tag: post.category === 'success_story' ? 'Success Story' : post.category === 'question' ? 'Question' : '',
@@ -1282,7 +1288,10 @@ const Blog = () => {
                   bookmarked: user ? post.bookmarks?.some(bookmark => bookmark.userEmail === user.email) || false : false,
                   commentsList: (post.comments || []).map(c => ({
                     id: c._id || `${post._id || post.id}-${c.createdAt}`,
-                    user: { name: c.author || 'Anonymous', avatar: null },
+                    user: { 
+                      name: c.user?.name || c.author || 'Anonymous', 
+                      avatar: c.user?.avatar || null 
+                    },
                     content: c.content,
                     timeAgo: formatTimeAgo(c.createdAt)
                   }))
@@ -1443,7 +1452,7 @@ const CreatePostModal = ({ onClose, user, onCreatePost }) => {
                     }}
                     className={`px-4 py-2 rounded-full text-sm font-medium transition-colors border-2 ${
                       postData.tag === type
-                        ? type === 'Question' ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-green-100 text-green-700 border-green-300'
+                        ? type === 'Question' ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-forest-green-100 text-forest-green-700 border-forest-green-300'
                         : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border-gray-200'
                     }`}
                   >
@@ -1462,7 +1471,7 @@ const CreatePostModal = ({ onClose, user, onCreatePost }) => {
                 type="text"
                 value={postData.title}
                 onChange={(e) => setPostData(prev => ({ ...prev, title: e.target.value }))}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-forest-green-600"
                 placeholder="What's your post about?"
                 required
               />
@@ -1475,7 +1484,7 @@ const CreatePostModal = ({ onClose, user, onCreatePost }) => {
                 value={postData.content}
                 onChange={(e) => setPostData(prev => ({ ...prev, content: e.target.value }))}
                 rows={6}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-forest-green-600 resize-none"
                 placeholder="Share your knowledge, experience, or ask for help..."
                 required
               />
@@ -1488,7 +1497,7 @@ const CreatePostModal = ({ onClose, user, onCreatePost }) => {
                 type="text"
                 value={postData.hashtags}
                 onChange={(e) => setPostData(prev => ({ ...prev, hashtags: e.target.value }))}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-forest-green-600"
                 placeholder="#PlantCare #IndoorPlants #BeginnerTips"
               />
         </div>
@@ -1514,7 +1523,7 @@ const CreatePostModal = ({ onClose, user, onCreatePost }) => {
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                      className="px-4 py-2 bg-forest-green-600 text-white rounded-lg hover:bg-forest-green-700 transition-colors"
                     >
                       Choose Photo
                     </button>
@@ -1553,7 +1562,7 @@ const CreatePostModal = ({ onClose, user, onCreatePost }) => {
                     tag: postData.tag.trim() || 'empty'
                   })
                 }}
-                className="flex-1 px-6 py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                className="flex-1 px-6 py-3 bg-forest-green-600 text-white rounded-xl hover:bg-forest-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
               >
                 {loading ? (
                   <div className="flex items-center justify-center">
@@ -1631,7 +1640,7 @@ const EditPostModal = ({ post, onClose, onUpdatePost }) => {
               <select
                 value={postData.tag}
                 onChange={(e) => setPostData(prev => ({ ...prev, tag: e.target.value }))}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-forest-green-600"
               >
                 <option value="Question">Question</option>
                 <option value="Success Story">Success Story</option>
@@ -1645,7 +1654,7 @@ const EditPostModal = ({ post, onClose, onUpdatePost }) => {
                 type="text"
                 value={postData.title}
                 onChange={(e) => setPostData(prev => ({ ...prev, title: e.target.value }))}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-forest-green-600"
                 placeholder="What's your question or success story?"
                 required
               />
@@ -1658,7 +1667,7 @@ const EditPostModal = ({ post, onClose, onUpdatePost }) => {
                 value={postData.content}
                 onChange={(e) => setPostData(prev => ({ ...prev, content: e.target.value }))}
                 rows={6}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-forest-green-600 resize-none"
                 placeholder="Share your knowledge, experience, or ask for help..."
                 required
               />
@@ -1671,7 +1680,7 @@ const EditPostModal = ({ post, onClose, onUpdatePost }) => {
                 type="text"
                 value={postData.hashtags}
                 onChange={(e) => setPostData(prev => ({ ...prev, hashtags: e.target.value }))}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-forest-green-600"
                 placeholder="#PlantCare #IndoorPlants #BeginnerTips"
               />
             </div>
@@ -1697,7 +1706,7 @@ const EditPostModal = ({ post, onClose, onUpdatePost }) => {
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                      className="px-4 py-2 bg-forest-green-600 text-white rounded-lg hover:bg-forest-green-700 transition-colors"
                     >
                       Choose Photo
                     </button>
@@ -1726,7 +1735,7 @@ const EditPostModal = ({ post, onClose, onUpdatePost }) => {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="flex-1 px-6 py-3 bg-forest-green-600 text-white rounded-xl hover:bg-forest-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {loading ? 'Updating...' : 'Update Post'}
               </button>

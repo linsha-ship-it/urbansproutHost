@@ -1,16 +1,31 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FaEye, FaEyeSlash, FaLeaf, FaUser, FaStar, FaStore, FaCrown, FaCheck, FaTimes } from 'react-icons/fa';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Eye, 
+  EyeOff, 
+  Mail, 
+  Lock, 
+  Leaf, 
+  ArrowRight, 
+  CheckCircle,
+  AlertCircle,
+  Loader2,
+  Sparkles,
+  Heart,
+  Zap,
+  User
+} from 'lucide-react';
+import { signInWithGoogle } from '../../config/firebase';
 import { authAPI } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { validateForm, validatePassword, getPasswordStrength, getValidationMessage, validateEmail } from '../../utils/validation';
+import Logo from '../../components/Logo';
 
 const Signup = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
   
-  const [step, setStep] = useState(1); // 1: Role selection, 2: Form
-  const [selectedRole, setSelectedRole] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -46,7 +61,7 @@ const Signup = () => {
     setEmailValidation(prev => ({ ...prev, isChecking: true }));
 
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api';
+      const API_BASE_URL = 'http://localhost:5002/api';
       const response = await fetch(`${API_BASE_URL}/auth/check-email`, {
         method: 'POST',
         headers: {
@@ -83,6 +98,7 @@ const Signup = () => {
     }
   }, []);
 
+
   // Debounced email validation
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -101,65 +117,24 @@ const Signup = () => {
     return () => clearTimeout(timeoutId);
   }, [formData.email, checkEmailAvailability]);
 
-  const roles = [
-    {
-      id: 'beginner',
-      title: 'Beginner',
-      description: 'New to plant care and looking to learn',
-      icon: FaUser,
-      color: 'bg-blue-500',
-      features: ['Plant care guides', 'Basic tutorials', 'Community support']
-    },
-    {
-      id: 'expert',
-      title: 'Expert',
-      description: 'Experienced gardener sharing knowledge',
-      icon: FaStar,
-      color: 'bg-purple-500',
-      features: ['Create content', 'Answer questions', 'Expert badge'],
-      requiresId: true
-    },
-    {
-      id: 'vendor',
-      title: 'Vendor',
-      description: 'Selling plants and gardening supplies',
-      icon: FaStore,
-      color: 'bg-green-500',
-      features: ['Sell products', 'Manage inventory', 'Business analytics'],
-      requiresId: true
-    },
-    {
-      id: 'admin',
-      title: 'Admin',
-      description: 'Platform administrator',
-      icon: FaCrown,
-      color: 'bg-red-500',
-      features: ['Full access', 'User management', 'System control'],
-      hidden: true // Hide from normal signup
-    }
-  ];
+
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
     
     // Real-time validation messages
-    const message = getValidationMessage(name, value, selectedRole);
+    const message = getValidationMessage(name, value, 'beginner');
     setFieldMessages(prev => ({ ...prev, [name]: message }));
     
     // Clear general error
     if (error) setError('');
   };
 
-  const handleRoleSelect = (roleId) => {
-    setSelectedRole(roleId);
-    setStep(2);
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    const validation = validateForm(formData, selectedRole);
+    const validation = validateForm(formData, 'beginner');
     if (!validation.isValid) {
       setError('Please fix the errors below');
       return;
@@ -171,28 +146,14 @@ const Signup = () => {
     try {
       const userData = {
         ...formData,
-        role: selectedRole
+        role: 'beginner'
       };
       
       const response = await authAPI.register(userData);
       
       if (response.success) {
         login(response.data.user, response.data.token);
-        
-        // Redirect based on user role
-        switch (selectedRole) {
-          case 'admin':
-            navigate('/admin/dashboard');
-            break;
-          case 'vendor':
-            navigate('/vendor/dashboard');
-            break;
-          case 'expert':
-            navigate('/expert/dashboard');
-            break;
-          default:
             navigate('/dashboard');
-        }
       }
     } catch (error) {
       setError(error.message || 'Registration failed. Please try again.');
@@ -209,35 +170,21 @@ const Signup = () => {
       const result = await signInWithGoogle();
       const user = result.user;
       
-      // Send Google user data to backend with selected role
+      // Send Google user data to backend with beginner role
       const googleData = {
         uid: user.uid,
         email: user.email,
         name: user.displayName,
         photoURL: user.photoURL,
         emailVerified: user.emailVerified,
-        role: selectedRole
+        role: 'beginner'
       };
       
       const response = await authAPI.googleSignIn(googleData);
       
       if (response.success) {
         login(response.data.user, response.data.token);
-        
-        // Redirect based on user role
-        switch (selectedRole) {
-          case 'admin':
-            navigate('/admin/dashboard');
-            break;
-          case 'vendor':
-            navigate('/vendor/dashboard');
-            break;
-          case 'expert':
-            navigate('/expert/dashboard');
-            break;
-          default:
             navigate('/dashboard');
-        }
       }
     } catch (error) {
       setError(error.message || 'Google sign-in failed. Please try again.');
@@ -249,122 +196,85 @@ const Signup = () => {
   const passwordValidation = validatePassword(formData.password);
   const passwordStrength = getPasswordStrength(passwordValidation.score);
 
-  // Step 1: Role Selection
-  if (step === 1) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl w-full space-y-8">
-          {/* Header */}
-          <div className="text-center">
-            <div className="flex justify-center items-center mb-4">
-              <FaLeaf className="text-4xl text-green-600 mr-2" />
-              <h1 className="text-3xl font-bold text-gray-900">UrbanSprout</h1>
-            </div>
-            <h2 className="text-2xl font-semibold text-gray-700">Choose Your Role</h2>
-            <p className="mt-2 text-gray-600">Select how you'd like to use UrbanSprout</p>
-          </div>
-
-          {/* Role Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {roles.filter(role => !role.hidden).map((role) => {
-              const IconComponent = role.icon;
-              return (
-                <div
-                  key={role.id}
-                  onClick={() => handleRoleSelect(role.id)}
-                  className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer border-2 border-transparent hover:border-green-200 p-6"
-                >
-                  <div className="text-center">
-                    <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full ${role.color} text-white mb-4`}>
-                      <IconComponent className="text-2xl" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">{role.title}</h3>
-                    <p className="text-gray-600 mb-4">{role.description}</p>
-                    
-                    <div className="space-y-2">
-                      {role.features.map((feature, index) => (
-                        <div key={index} className="flex items-center text-sm text-gray-700">
-                          <FaCheck className="text-green-500 mr-2 flex-shrink-0" />
-                          {feature}
-                        </div>
-                      ))}
+    <div className="min-h-screen bg-gradient-to-br from-forest-green-50 via-cream-100 to-forest-green-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+      {/* Background decorative elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-forest-green-200 rounded-full opacity-20 animate-pulse"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-cream-300 rounded-full opacity-20 animate-pulse delay-1000"></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-forest-green-100 rounded-full opacity-10 animate-pulse delay-500"></div>
                     </div>
                     
-                    {role.requiresId && (
-                      <div className="mt-4 p-2 bg-yellow-50 rounded-lg">
-                        <p className="text-xs text-yellow-700">
-                          Requires professional ID verification
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Back to Login */}
-          <div className="text-center">
-            <p className="text-sm text-gray-600">
-              Already have an account?{' '}
-              <Link
-                to="/login"
-                className="font-medium text-green-600 hover:text-green-500"
-              >
-                Sign in here
-              </Link>
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Step 2: Registration Form
-  const selectedRoleData = roles.find(role => role.id === selectedRole);
-  const IconComponent = selectedRoleData?.icon;
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8 }}
+        className="max-w-md w-full space-y-8 relative z-10"
+      >
         {/* Header */}
         <div className="text-center">
-          <div className="flex justify-center items-center mb-4">
-            <FaLeaf className="text-4xl text-green-600 mr-2" />
-            <h1 className="text-3xl font-bold text-gray-900">UrbanSprout</h1>
-          </div>
-          
-          {/* Selected Role */}
-          <div className="flex items-center justify-center mb-4">
-            <div className={`inline-flex items-center justify-center w-12 h-12 rounded-full ${selectedRoleData?.color} text-white mr-3`}>
-              <IconComponent className="text-lg" />
-            </div>
-            <div className="text-left">
-              <h2 className="text-xl font-semibold text-gray-700">{selectedRoleData?.title} Registration</h2>
-              <button
-                onClick={() => setStep(1)}
-                className="text-sm text-green-600 hover:text-green-500"
-              >
-                Change role
-              </button>
-            </div>
-          </div>
+          <Link to="/" className="inline-block group">
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="mx-auto h-20 w-20 rounded-full overflow-hidden flex items-center justify-center mb-6 group-hover:scale-105 transition-transform duration-300 shadow-lg group-hover:shadow-xl bg-white"
+            >
+              <Logo size="xl" className="w-full h-full object-cover" />
+            </motion.div>
+          </Link>
+          <Link to="/" className="block mb-4">
+            <motion.h1 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3 }}
+              className="text-4xl font-bold bg-gradient-to-r from-forest-green-600 to-forest-green-800 bg-clip-text text-transparent hover:from-forest-green-500 hover:to-forest-green-700 transition-all duration-300 cursor-pointer"
+            >
+              UrbanSprout
+            </motion.h1>
+            </Link>
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+          >
+            <p className="text-sm text-forest-green-600">Start your gardening journey with us</p>
+          </motion.div>
         </div>
 
         {/* Form */}
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+          className="bg-white/80 backdrop-blur-sm p-8 rounded-2xl shadow-xl border border-white/20"
+        >
+          <form className="space-y-6" onSubmit={handleSubmit}>
+            {/* Error Message */}
+            <AnimatePresence>
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center"
+                >
+                  <AlertCircle className="h-5 w-5 mr-2" />
               {error}
-            </div>
+                </motion.div>
           )}
+            </AnimatePresence>
 
-          <div className="space-y-4">
-            {/* Name */}
+            <div className="space-y-5">
+              {/* Name Field */}
             <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="name" className="block text-sm font-medium text-forest-green-700 mb-2">
                 Full Name
               </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <User className="h-5 w-5 text-forest-green-400" />
+                  </div>
               <input
                 id="name"
                 name="name"
@@ -372,24 +282,34 @@ const Signup = () => {
                 autoComplete="name"
                 value={formData.name}
                 onChange={handleInputChange}
-                className={`w-full px-3 py-2 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 ${
-                  fieldMessages.name && fieldMessages.name.includes('Invalid') ? 'border-red-300' : 'border-gray-300'
+                    className={`w-full pl-10 pr-3 py-3 border rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-forest-green-500 focus:border-transparent transition-all duration-200 ${
+                      fieldMessages.name && fieldMessages.name.includes('Invalid') ? 'border-red-300 bg-red-50' : 'border-forest-green-200 hover:border-forest-green-300'
                 }`}
                 placeholder="Enter your full name"
               />
+                </div>
               {fieldMessages.name && (
-                <p className={`mt-1 text-sm ${fieldMessages.name.includes('Invalid') ? 'text-red-600' : 'text-gray-500'}`}>
+                  <motion.p 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className={`mt-1 text-sm flex items-center ${fieldMessages.name.includes('Invalid') ? 'text-red-600' : 'text-gray-500'}`}
+                  >
+                    {fieldMessages.name.includes('Invalid') && <AlertCircle className="h-4 w-4 mr-1" />}
                   {fieldMessages.name}
-                </p>
+                  </motion.p>
               )}
             </div>
 
-            {/* Email */}
+
+              {/* Email Field */}
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="email" className="block text-sm font-medium text-forest-green-700 mb-2">
                 Email Address
               </label>
               <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Mail className="h-5 w-5 text-forest-green-400" />
+                  </div>
                 <input
                   id="email"
                   name="email"
@@ -397,10 +317,10 @@ const Signup = () => {
                   autoComplete="email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  className={`w-full px-3 py-2 pr-10 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 ${
-                    emailValidation.exists === true ? 'border-red-300' : 
-                    emailValidation.isValid === true ? 'border-green-300' : 
-                    fieldMessages.email && fieldMessages.email.includes('Invalid') ? 'border-red-300' : 'border-gray-300'
+                    className={`w-full pl-10 pr-10 py-3 border rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-forest-green-500 focus:border-transparent transition-all duration-200 ${
+                      emailValidation.exists === true ? 'border-red-300 bg-red-50' : 
+                      emailValidation.isValid === true ? 'border-green-300 bg-green-50' : 
+                      fieldMessages.email && fieldMessages.email.includes('Invalid') ? 'border-red-300 bg-red-50' : 'border-forest-green-200 hover:border-forest-green-300'
                   }`}
                   placeholder="Enter your email"
                 />
@@ -408,66 +328,54 @@ const Signup = () => {
                 {/* Email validation indicator */}
                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
                   {emailValidation.isChecking ? (
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                      <Loader2 className="animate-spin h-4 w-4 text-blue-500" />
                   ) : emailValidation.exists === true ? (
-                    <FaTimes className="h-4 w-4 text-red-500" />
+                      <AlertCircle className="h-4 w-4 text-red-500" />
                   ) : emailValidation.isValid === true ? (
-                    <FaCheck className="h-4 w-4 text-green-500" />
+                      <CheckCircle className="h-4 w-4 text-green-500" />
                   ) : null}
                 </div>
               </div>
               
               {/* Email validation message */}
               {emailValidation.message && (
-                <p className={`mt-1 text-sm flex items-center ${
+                  <motion.p 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className={`mt-1 text-sm flex items-center ${
                   emailValidation.exists === true ? 'text-red-600' : 
                   emailValidation.isValid === true ? 'text-green-600' : 'text-gray-500'
-                }`}>
-                  {emailValidation.exists === true && <FaTimes className="h-3 w-3 mr-1" />}
-                  {emailValidation.isValid === true && <FaCheck className="h-3 w-3 mr-1" />}
+                    }`}
+                  >
+                    {emailValidation.exists === true && <AlertCircle className="h-3 w-3 mr-1" />}
+                    {emailValidation.isValid === true && <CheckCircle className="h-3 w-3 mr-1" />}
                   {emailValidation.message}
-                </p>
+                  </motion.p>
               )}
               
               {/* Field validation message */}
               {fieldMessages.email && (
-                <p className={`mt-1 text-sm ${fieldMessages.email.includes('Invalid') ? 'text-red-600' : 'text-gray-500'}`}>
+                  <motion.p 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className={`mt-1 text-sm flex items-center ${fieldMessages.email.includes('Invalid') ? 'text-red-600' : 'text-gray-500'}`}
+                  >
+                    {fieldMessages.email.includes('Invalid') && <AlertCircle className="h-3 w-3 mr-1" />}
                   {fieldMessages.email}
-                </p>
+                  </motion.p>
               )}
             </div>
 
-            {/* Professional ID for Expert/Vendor */}
-            {(selectedRole === 'expert' || selectedRole === 'vendor') && (
-              <div>
-                <label htmlFor="professionalId" className="block text-sm font-medium text-gray-700 mb-1">
-                  {selectedRole === 'expert' ? 'Expert ID' : 'Vendor ID'}
-                </label>
-                <input
-                  id="professionalId"
-                  name="professionalId"
-                  type="text"
-                  value={formData.professionalId}
-                  onChange={handleInputChange}
-                  className={`w-full px-3 py-2 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 ${
-                    fieldMessages.professionalId && fieldMessages.professionalId.includes('Invalid') ? 'border-red-300' : 'border-gray-300'
-                  }`}
-                  placeholder={`Enter your ${selectedRole} ID`}
-                />
-                {fieldMessages.professionalId && (
-                  <p className={`mt-1 text-sm ${fieldMessages.professionalId.includes('Invalid') ? 'text-red-600' : 'text-gray-500'}`}>
-                    {fieldMessages.professionalId}
-                  </p>
-                )}
-              </div>
-            )}
 
-            {/* Password */}
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-                Password
-              </label>
-              <div className="relative">
+              {/* Password Field */}
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-forest-green-700 mb-2">
+                  Password
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Lock className="h-5 w-5 text-forest-green-400" />
+              </div>
                 <input
                   id="password"
                   name="password"
@@ -475,18 +383,18 @@ const Signup = () => {
                   autoComplete="new-password"
                   value={formData.password}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    className="w-full pl-10 pr-10 py-3 border border-forest-green-200 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-forest-green-500 focus:border-transparent transition-all duration-200 hover:border-forest-green-300"
                   placeholder="Create a password"
                 />
                 <button
                   type="button"
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center hover:text-forest-green-600 transition-colors"
                   onClick={() => setShowPassword(!showPassword)}
                 >
                   {showPassword ? (
-                    <FaEyeSlash className="h-4 w-4 text-gray-400" />
+                      <EyeOff className="h-5 w-5 text-forest-green-400" />
                   ) : (
-                    <FaEye className="h-4 w-4 text-gray-400" />
+                      <Eye className="h-5 w-5 text-forest-green-400" />
                   )}
                 </button>
               </div>
@@ -495,12 +403,12 @@ const Signup = () => {
               {formData.password && (
                 <div className="mt-2">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-gray-600">Password strength:</span>
+                      <span className="text-xs text-forest-green-600">Password strength:</span>
                     <span className={`text-xs font-medium ${passwordStrength.color}`}>
                       {passwordStrength.text}
                     </span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-1">
+                    <div className="w-full bg-forest-green-200 rounded-full h-1">
                     <div
                       className={`h-1 rounded-full transition-all duration-300 ${passwordStrength.bgColor}`}
                       style={{ width: `${(passwordValidation.score / 5) * 100}%` }}
@@ -514,19 +422,19 @@ const Signup = () => {
                 <div className="mt-2 space-y-1">
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className={`flex items-center ${passwordValidation.validations.minLength ? 'text-green-600' : 'text-red-600'}`}>
-                      {passwordValidation.validations.minLength ? <FaCheck className="mr-1" /> : <FaTimes className="mr-1" />}
+                        {passwordValidation.validations.minLength ? <CheckCircle className="mr-1 h-3 w-3" /> : <AlertCircle className="mr-1 h-3 w-3" />}
                       8+ characters
                     </div>
                     <div className={`flex items-center ${passwordValidation.validations.hasUppercase ? 'text-green-600' : 'text-red-600'}`}>
-                      {passwordValidation.validations.hasUppercase ? <FaCheck className="mr-1" /> : <FaTimes className="mr-1" />}
+                        {passwordValidation.validations.hasUppercase ? <CheckCircle className="mr-1 h-3 w-3" /> : <AlertCircle className="mr-1 h-3 w-3" />}
                       Uppercase
                     </div>
                     <div className={`flex items-center ${passwordValidation.validations.hasNumber ? 'text-green-600' : 'text-red-600'}`}>
-                      {passwordValidation.validations.hasNumber ? <FaCheck className="mr-1" /> : <FaTimes className="mr-1" />}
+                        {passwordValidation.validations.hasNumber ? <CheckCircle className="mr-1 h-3 w-3" /> : <AlertCircle className="mr-1 h-3 w-3" />}
                       Number
                     </div>
                     <div className={`flex items-center ${passwordValidation.validations.hasSpecialChar ? 'text-green-600' : 'text-red-600'}`}>
-                      {passwordValidation.validations.hasSpecialChar ? <FaCheck className="mr-1" /> : <FaTimes className="mr-1" />}
+                        {passwordValidation.validations.hasSpecialChar ? <CheckCircle className="mr-1 h-3 w-3" /> : <AlertCircle className="mr-1 h-3 w-3" />}
                       Special char
                     </div>
                   </div>
@@ -534,12 +442,15 @@ const Signup = () => {
               )}
             </div>
 
-            {/* Confirm Password */}
+              {/* Confirm Password Field */}
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="confirmPassword" className="block text-sm font-medium text-forest-green-700 mb-2">
                 Confirm Password
               </label>
               <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Lock className="h-5 w-5 text-forest-green-400" />
+                  </div>
                 <input
                   id="confirmPassword"
                   name="confirmPassword"
@@ -547,60 +458,123 @@ const Signup = () => {
                   autoComplete="new-password"
                   value={formData.confirmPassword}
                   onChange={handleInputChange}
-                  className={`w-full px-3 py-2 pr-10 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 ${
-                    formData.confirmPassword && formData.password !== formData.confirmPassword ? 'border-red-300' : 'border-gray-300'
+                    className={`w-full pl-10 pr-10 py-3 border rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-forest-green-500 focus:border-transparent transition-all duration-200 ${
+                      formData.confirmPassword && formData.password !== formData.confirmPassword ? 'border-red-300 bg-red-50' : 'border-forest-green-200 hover:border-forest-green-300'
                   }`}
                   placeholder="Confirm your password"
                 />
                 <button
                   type="button"
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center hover:text-forest-green-600 transition-colors"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                 >
                   {showConfirmPassword ? (
-                    <FaEyeSlash className="h-4 w-4 text-gray-400" />
+                      <EyeOff className="h-5 w-5 text-forest-green-400" />
                   ) : (
-                    <FaEye className="h-4 w-4 text-gray-400" />
+                      <Eye className="h-5 w-5 text-forest-green-400" />
                   )}
                 </button>
               </div>
               {formData.confirmPassword && formData.password !== formData.confirmPassword && (
-                <p className="mt-1 text-sm text-red-600">Passwords do not match</p>
+                  <motion.p 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="mt-1 text-sm text-red-600 flex items-center"
+                  >
+                    <AlertCircle className="h-4 w-4 mr-1" />
+                    Passwords do not match
+                  </motion.p>
               )}
             </div>
           </div>
 
           {/* Submit Button */}
-          <button
-            type="submit"
-            disabled={loading || !passwordValidation.isValid || emailValidation.exists === true || emailValidation.isChecking}
-            className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              type="submit"
+              disabled={loading || !passwordValidation.isValid || emailValidation.exists === true || emailValidation.isChecking}
+              className="group relative w-full flex justify-center items-center py-3 px-4 border border-transparent text-sm font-medium rounded-xl text-cream-100 bg-gradient-to-r from-forest-green-600 to-forest-green-700 hover:from-forest-green-700 hover:to-forest-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-forest-green-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
+            >
             {loading ? (
               <div className="flex items-center">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
                 Creating account...
               </div>
             ) : (
-              `Create ${selectedRoleData?.title} Account`
-            )}
-          </button>
+                <>
+                  Create Account
+                  <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                </>
+              )}
+            </motion.button>
 
+            {/* Divider */}
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-forest-green-200" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-3 bg-white text-forest-green-500 font-medium">Or continue with</span>
+              </div>
+            </div>
+
+            {/* Google Sign In */}
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              type="button"
+              onClick={handleGoogleSignIn}
+              disabled={loading}
+              className="w-full flex justify-center items-center py-3 px-4 border border-forest-green-300 rounded-xl shadow-sm text-sm font-medium text-forest-green-700 bg-white hover:bg-forest-green-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-forest-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+            >
+              <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24">
+                <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+              </svg>
+              Sign up with Google
+            </motion.button>
 
           {/* Sign in link */}
           <div className="text-center">
-            <p className="text-sm text-gray-600">
+              <p className="text-sm text-forest-green-600">
               Already have an account?{' '}
               <Link
                 to="/login"
-                className="font-medium text-green-600 hover:text-green-500"
+                  className="font-medium text-forest-green-500 hover:text-forest-green-400 transition-colors"
               >
                 Sign in here
               </Link>
             </p>
           </div>
         </form>
+        </motion.div>
+
+        {/* Features highlight */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.8 }}
+          className="text-center space-y-3"
+        >
+          <div className="flex justify-center items-center space-x-6 text-sm text-forest-green-600">
+            <div className="flex items-center">
+              <Heart className="h-4 w-4 mr-1 text-red-400" />
+              Plant Care
+            </div>
+            <div className="flex items-center">
+              <Sparkles className="h-4 w-4 mr-1 text-yellow-400" />
+              Smart Suggestions
+            </div>
+            <div className="flex items-center">
+              <Zap className="h-4 w-4 mr-1 text-blue-400" />
+              Expert Tips
+            </div>
       </div>
+        </motion.div>
+      </motion.div>
     </div>
   );
 };

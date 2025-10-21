@@ -116,6 +116,40 @@ const productSchema = new mongoose.Schema({
     default: null
   },
   // Auto-calculated discount fields (for performance)
+  appliedDiscounts: [{
+    discountId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Discount',
+      required: true
+    },
+    discountName: {
+      type: String,
+      required: true
+    },
+    discountType: {
+      type: String,
+      enum: ['percentage', 'fixed'],
+      required: true
+    },
+    discountValue: {
+      type: Number,
+      required: true
+    },
+    discountAmount: {
+      type: Number,
+      required: true
+    },
+    appliedAt: {
+      type: Date,
+      default: Date.now
+    },
+    appliedBy: {
+      type: String,
+      enum: ['manual', 'category', 'automatic'],
+      default: 'manual'
+    }
+  }],
+  // Legacy field for backward compatibility
   appliedDiscount: {
     discountId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -143,6 +177,11 @@ const productSchema = new mongoose.Schema({
       type: Date,
       default: null
     }
+  },
+  // Final calculated price after all discounts
+  finalPrice: {
+    type: Number,
+    default: null
   }
 }, {
   timestamps: true
@@ -155,27 +194,149 @@ productSchema.index({ sku: 1 });
 productSchema.index({ featured: 1, published: 1 });
 productSchema.index({ archived: 1 });
 
-// Virtual for current price (applied discount price if available, otherwise regular price)
+// Method to calculate total discount from all applied discounts
+productSchema.methods.calculateTotalDiscount = function() {
+  let totalDiscountAmount = 0;
+  let currentPrice = this.regularPrice || this.price || 0;
+  
+  // Apply discounts in order (percentage first, then fixed)
+  const appliedDiscounts = this.appliedDiscounts || [];
+  const percentageDiscounts = appliedDiscounts.filter(d => d.discountType === 'percentage');
+  const fixedDiscounts = appliedDiscounts.filter(d => d.discountType === 'fixed');
+  
+  // Apply percentage discounts first
+  for (const discount of percentageDiscounts) {
+    const discountAmount = (currentPrice * discount.discountValue) / 100;
+    totalDiscountAmount += discountAmount;
+    currentPrice -= discountAmount;
+  }
+  
+  // Apply fixed discounts
+  for (const discount of fixedDiscounts) {
+    const discountAmount = Math.min(discount.discountValue, currentPrice);
+    totalDiscountAmount += discountAmount;
+    currentPrice -= discountAmount;
+  }
+  
+  return {
+    totalDiscountAmount,
+    finalPrice: Math.max(0, currentPrice),
+    discountCount: appliedDiscounts.length
+  };
+};
+
+// Method to add a discount to the product
+productSchema.methods.addDiscount = function(discount, appliedBy = 'manual') {
+  // Initialize appliedDiscounts if it doesn't exist
+  if (!this.appliedDiscounts) {
+    this.appliedDiscounts = [];
+  }
+  
+  // Check if discount already exists
+  const existingDiscount = this.appliedDiscounts.find(d => 
+    d.discountId.toString() === discount._id.toString()
+  );
+  
+  if (existingDiscount) {
+    return false; // Discount already applied
+  }
+  
+  // Calculate discount amount
+  const currentPrice = this.finalPrice || this.regularPrice || this.price || 0;
+  let discountAmount = 0;
+  
+  if (discount.type === 'percentage') {
+    discountAmount = (currentPrice * discount.value) / 100;
+  } else {
+    discountAmount = Math.min(discount.value, currentPrice);
+  }
+  
+  // Add discount to array
+  this.appliedDiscounts.push({
+    discountId: discount._id,
+    discountName: discount.name,
+    discountType: discount.type,
+    discountValue: discount.value,
+    discountAmount: discountAmount,
+    appliedBy: appliedBy,
+    appliedAt: new Date()
+  });
+  
+  // Recalculate final price
+  const { finalPrice } = this.calculateTotalDiscount();
+  this.finalPrice = finalPrice;
+  
+  return true;
+};
+
+// Method to remove a discount from the product
+productSchema.methods.removeDiscount = function(discountId) {
+  if (!this.appliedDiscounts) {
+    this.appliedDiscounts = [];
+  }
+  
+  this.appliedDiscounts = this.appliedDiscounts.filter(d => 
+    d.discountId.toString() !== discountId.toString()
+  );
+  
+  // Recalculate final price
+  const { finalPrice } = this.calculateTotalDiscount();
+  this.finalPrice = finalPrice;
+  
+  return true;
+};
+
+// Virtual for current price (final price after all discounts)
 productSchema.virtual('currentPrice').get(function() {
+  if (this.finalPrice !== null) {
+    return this.finalPrice;
+  }
   if (this.appliedDiscount && this.appliedDiscount.calculatedPrice) {
     return this.appliedDiscount.calculatedPrice;
   }
   return this.discountPrice || this.regularPrice;
 });
 
-// Virtual for discount percentage
+// Virtual for total discount percentage
 productSchema.virtual('discountPercentage').get(function() {
-  if (this.appliedDiscount && this.appliedDiscount.calculatedPrice && this.regularPrice) {
-    return Math.round(((this.regularPrice - this.appliedDiscount.calculatedPrice) / this.regularPrice) * 100);
-  }
-  if (this.discountPrice && this.regularPrice) {
-    return Math.round(((this.regularPrice - this.discountPrice) / this.regularPrice) * 100);
+  const originalPrice = this.regularPrice || this.price || 0;
+  const currentPrice = this.currentPrice;
+  
+  if (originalPrice > 0 && currentPrice < originalPrice) {
+    return Math.round(((originalPrice - currentPrice) / originalPrice) * 100);
   }
   return 0;
 });
 
-// Virtual for active discount info
+// Virtual for active discounts info
+productSchema.virtual('activeDiscounts').get(function() {
+  if (!this.appliedDiscounts || !Array.isArray(this.appliedDiscounts)) {
+    return [];
+  }
+  return this.appliedDiscounts.map(discount => ({
+    id: discount.discountId,
+    name: discount.discountName,
+    type: discount.discountType,
+    value: discount.discountValue,
+    amount: discount.discountAmount,
+    appliedBy: discount.appliedBy,
+    appliedAt: discount.appliedAt
+  }));
+});
+
+// Virtual for active discount info (legacy compatibility)
 productSchema.virtual('activeDiscount').get(function() {
+  if (this.appliedDiscounts && Array.isArray(this.appliedDiscounts) && this.appliedDiscounts.length > 0) {
+    const primaryDiscount = this.appliedDiscounts[0];
+    return {
+      id: primaryDiscount.discountId,
+      name: primaryDiscount.discountName,
+      type: primaryDiscount.discountType,
+      value: primaryDiscount.discountValue,
+      calculatedPrice: this.currentPrice,
+      appliedAt: primaryDiscount.appliedAt
+    };
+  }
   if (this.appliedDiscount && this.appliedDiscount.discountId) {
     return {
       id: this.appliedDiscount.discountId,
@@ -199,4 +360,5 @@ productSchema.virtual('stockStatus').get(function() {
 // Ensure virtual fields are serialized
 productSchema.set('toJSON', { virtuals: true });
 
+module.exports = mongoose.model('Product', productSchema);
 module.exports = mongoose.model('Product', productSchema);

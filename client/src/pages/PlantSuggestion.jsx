@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FaLeaf, FaSun, FaHome, FaClock, FaSeedling, FaArrowRight, FaArrowLeft } from 'react-icons/fa';
 import { apiCall } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
+import FloatingChatbot from '../components/FloatingChatbot';
+import Logo from '../components/Logo';
 
 const PlantSuggestion = () => {
   const { user } = useAuth();
@@ -129,7 +131,7 @@ const PlantSuggestion = () => {
       });
 
       if (response.success) {
-        alert(`Added ${plant.name} to your garden! 🌱`);
+        alert(`Added ${plant.name} to your garden!`);
       } else {
         throw new Error(response.message || 'Failed to add plant to garden');
       }
@@ -143,7 +145,14 @@ const PlantSuggestion = () => {
         if (!existing.includes(plant.name)) {
           const updated = [...existing, plant.name];
           localStorage.setItem(key, JSON.stringify(updated));
-          alert(`Added ${plant.name} to your garden! 🌱 (Saved locally)`);
+
+          // Persist image mapping so MyGardenJournal can render images
+          const imagesKey = `plant_images_${user?.id || user?.uid || user?.email || 'guest'}`;
+          const existingImages = JSON.parse(localStorage.getItem(imagesKey) || '{}');
+          existingImages[plant.name] = plant.image;
+          localStorage.setItem(imagesKey, JSON.stringify(existingImages));
+
+          alert(`Added ${plant.name} to your garden! (Saved locally)`);
         } else {
           alert(`${plant.name} is already in your garden!`);
         }
@@ -156,11 +165,17 @@ const PlantSuggestion = () => {
 
   if (results) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 py-8">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="min-h-screen bg-gradient-to-br from-forest-green-50 via-cream-100 to-forest-green-100 py-8 relative overflow-hidden">
+        {/* Background decorative elements */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-40 -right-40 w-80 h-80 bg-forest-green-200 rounded-full opacity-20 animate-pulse"></div>
+          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-cream-300 rounded-full opacity-20 animate-pulse delay-1000"></div>
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-forest-green-100 rounded-full opacity-10 animate-pulse delay-500"></div>
+        </div>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="text-center mb-8">
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
-              <FaLeaf className="w-8 h-8 text-green-600" />
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="inline-flex items-center justify-center w-16 h-16 bg-forest-green-100 rounded-full mb-4">
+              <FaLeaf className="w-8 h-8 text-forest-green-600" />
             </motion.div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Your Perfect Plants!</h1>
             <p className="text-gray-600">{results.recommendations}</p>
@@ -169,11 +184,11 @@ const PlantSuggestion = () => {
           {results.plants.length > 0 ? (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
               {results.plants.map((plant, index) => (
-                <motion.div key={plant.name} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + index * 0.1 }} className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow">
+                <motion.div key={plant.name} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + index * 0.1 }} className="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow border border-white/20">
                   <div className="relative h-48">
                     <img src={plant.image} alt={plant.name} className="w-full h-full object-cover" />
                     <div className="absolute top-3 right-3">
-                      <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-medium">{plant.category}</span>
+                      <span className="bg-forest-green-100 text-forest-green-700 px-3 py-1 rounded-full text-sm font-medium">{plant.category}</span>
                     </div>
                   </div>
                   <div className="p-6">
@@ -193,7 +208,7 @@ const PlantSuggestion = () => {
                         <span className="font-medium">{plant.difficulty}</span>
                       </div>
                     </div>
-                    <button onClick={() => handleAddToGarden(plant)} className="w-full mt-4 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors">
+                    <button onClick={() => handleAddToGarden(plant)} className="w-full mt-4 bg-forest-green-600 text-white py-2 px-4 rounded-lg hover:bg-forest-green-700 transition-colors">
                       Add to My Garden
                     </button>
                   </div>
@@ -202,7 +217,7 @@ const PlantSuggestion = () => {
             </motion.div>
           ) : (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="text-center py-12">
-              <div className="bg-white rounded-xl shadow-lg p-8 max-w-md mx-auto">
+              <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg p-8 max-w-md mx-auto border border-white/20">
                 <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <FaLeaf className="w-8 h-8 text-yellow-600" />
                 </div>
@@ -232,26 +247,38 @@ const PlantSuggestion = () => {
               Take Quiz Again
             </button>
             {results.plants.length > 0 && (
-              <button onClick={() => window.location.href = '/my-garden-journal'} className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors">
+              <button onClick={() => window.location.href = '/my-garden-journal'} className="bg-forest-green-600 text-white px-6 py-3 rounded-lg hover:bg-forest-green-700 transition-colors">
                 View My Garden Journal
               </button>
             )}
           </div>
         </div>
+        
+        {/* Floating Chatbot */}
+        <FloatingChatbot />
       </div>
     );
   }
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
-            <FaLeaf className="w-8 h-8 text-green-600 animate-pulse" />
+      <div className="min-h-screen bg-gradient-to-br from-forest-green-50 via-cream-100 to-forest-green-100 flex items-center justify-center relative overflow-hidden">
+        {/* Background decorative elements */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-40 -right-40 w-80 h-80 bg-forest-green-200 rounded-full opacity-20 animate-pulse"></div>
+          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-cream-300 rounded-full opacity-20 animate-pulse delay-1000"></div>
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-forest-green-100 rounded-full opacity-10 animate-pulse delay-500"></div>
+        </div>
+        <div className="text-center relative z-10">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-forest-green-100 rounded-full mb-4">
+            <Logo size="lg" className="animate-pulse" />
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Finding Your Perfect Plants...</h2>
           <p className="text-gray-600">This may take a moment</p>
         </div>
+        
+        {/* Floating Chatbot */}
+        <FloatingChatbot />
       </div>
     );
   }
@@ -260,11 +287,17 @@ const PlantSuggestion = () => {
   const progress = ((currentStep + 1) / questions.length) * 100;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 py-8">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-forest-green-50 via-cream-100 to-forest-green-100 py-8 relative overflow-hidden">
+      {/* Background decorative elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-forest-green-200 rounded-full opacity-20 animate-pulse"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-cream-300 rounded-full opacity-20 animate-pulse delay-1000"></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-forest-green-100 rounded-full opacity-10 animate-pulse delay-500"></div>
+      </div>
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="text-center mb-8">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
-            <FaLeaf className="w-8 h-8 text-green-600" />
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="inline-flex items-center justify-center w-16 h-16 bg-forest-green-100 rounded-full mb-4">
+            <FaLeaf className="w-8 h-8 text-forest-green-600" />
           </motion.div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Plant Suggestion Quiz</h1>
           <p className="text-gray-600">Answer a few questions to get personalized plant recommendations</p>
@@ -276,20 +309,20 @@ const PlantSuggestion = () => {
             <span>{Math.round(progress)}% Complete</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
-            <motion.div className="bg-green-600 h-2 rounded-full" initial={{ width: 0 }} animate={{ width: `${progress}%` }} transition={{ duration: 0.5 }} />
+            <motion.div className="bg-forest-green-600 h-2 rounded-full" initial={{ width: 0 }} animate={{ width: `${progress}%` }} transition={{ duration: 0.5 }} />
           </div>
         </div>
 
         <AnimatePresence mode="wait">
-          <motion.div key={currentStep} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.3 }} className="bg-white rounded-xl shadow-lg p-8 mb-8">
+          <motion.div key={currentStep} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.3 }} className="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg p-8 mb-8 border border-white/20">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">{currentQuestion.title}</h2>
             <p className="text-gray-600 mb-8">{currentQuestion.subtitle}</p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {currentQuestion.options.map((option, index) => (
-                <motion.button key={option.value} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }} onClick={() => handleAnswer(currentQuestion.id, option.value)} className={`p-6 rounded-lg border-2 transition-all text-left ${answers[currentQuestion.id] === option.value ? 'border-green-500 bg-green-50' : 'border-gray-200 hover:border-green-300 hover:bg-green-50'}`}>
+                <motion.button key={option.value} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }} onClick={() => handleAnswer(currentQuestion.id, option.value)} className={`p-6 rounded-lg border-2 transition-all text-left ${answers[currentQuestion.id] === option.value ? 'border-forest-green-500 bg-forest-green-50' : 'border-gray-200 hover:border-forest-green-300 hover:bg-forest-green-50'}`}>
                   <div className="flex items-center mb-3">
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center mr-3 ${answers[currentQuestion.id] === option.value ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'}`}>
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center mr-3 ${answers[currentQuestion.id] === option.value ? 'bg-forest-green-100 text-forest-green-600' : 'bg-gray-100 text-gray-600'}`}>
                       {option.icon}
                     </div>
                     <h3 className="font-semibold text-gray-900">{option.label}</h3>
@@ -307,11 +340,14 @@ const PlantSuggestion = () => {
             Previous
           </button>
 
-          <button onClick={nextStep} disabled={!answers[currentQuestion.id]} className={`flex items-center px-6 py-3 rounded-lg transition-colors ${!answers[currentQuestion.id] ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-green-600 text-white hover:bg-green-700'}`}>
+          <button onClick={nextStep} disabled={!answers[currentQuestion.id]} className={`flex items-center px-6 py-3 rounded-lg transition-colors ${!answers[currentQuestion.id] ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-forest-green-600 text-white hover:bg-forest-green-700'}`}>
             {currentStep === questions.length - 1 ? 'Get Results' : 'Next'}
             <FaArrowRight className="ml-2" />
           </button>
         </div>
+        
+        {/* Floating Chatbot */}
+        <FloatingChatbot />
       </div>
     </div>
   );

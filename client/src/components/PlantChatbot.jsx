@@ -23,11 +23,12 @@ const PlantChatbot = ({ onClose, user }) => {
     const welcomeMessage = {
       id: Date.now(),
       type: 'bot',
-      content: "Hi! 🌱 I'm your plant suggestion assistant. I'll help you find the perfect vegetables, fruits, and herbs to grow based on your space, time, and sunlight availability. What would you like to grow?",
+      content: "Hi! 🌱 I'm your edible plant assistant! I specialize in helping you grow delicious vegetables and fruits in small spaces. I can help you with tomatoes, lettuce, carrots, peppers, strawberries, and many other edible plants. What would you like to grow?",
       timestamp: new Date(),
       buttons: [
-        "I'm a beginner, give me suggestions",
-        "I want specific recommendations", 
+        "I'm a beginner, help me start",
+        "What vegetables can I grow?", 
+        "What fruits can I grow?",
         "Show me quick growing options"
       ]
     }
@@ -126,11 +127,12 @@ const PlantChatbot = ({ onClose, user }) => {
     const welcomeMessage = {
       id: Date.now(),
       type: 'bot',
-      content: "Let's start fresh! 🌱 What would you like to grow?",
+      content: "Let's start fresh! 🌱 I'm here to help you grow delicious vegetables and fruits. What would you like to know?",
       timestamp: new Date(),
       buttons: [
-        "I'm a beginner, give me suggestions",
-        "I want specific recommendations", 
+        "I'm a beginner, help me start",
+        "What vegetables can I grow?", 
+        "What fruits can I grow?",
         "Show me quick growing options"
       ]
     }
@@ -193,8 +195,8 @@ const PlantChatbot = ({ onClose, user }) => {
               <FaRobot className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-semibold">Plant Assistant</h3>
-              <p className="text-xs text-green-100">Online</p>
+              <h3 className="font-semibold">Edible Plant Assistant</h3>
+              <p className="text-xs text-green-100">Vegetables & Fruits Expert</p>
             </div>
           </div>
           <button
@@ -376,7 +378,7 @@ const PlantChatbot = ({ onClose, user }) => {
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Ask about plants, growing tips, or specific varieties..."
+              placeholder="Ask about vegetables, fruits, growing tips, or specific varieties..."
               className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
               disabled={isTyping}
             />

@@ -38,6 +38,7 @@ const {
   bulkUpdateProducts,
   getInventoryStats,
   getInventoryInsights,
+  getInventoryInsightsDebug,
   recalculateAnalytics,
   getNotifications,
   getProductReviews,
@@ -51,6 +52,8 @@ const {
   deleteDiscount,
   applyDiscountToProduct,
   removeDiscountFromProduct,
+  applyDiscountToCategory,
+  getUpcomingDiscounts,
   getAvailableDiscountsForProduct,
   // Plant Suggestions Management
   getAllPlantSuggestions,
@@ -154,6 +157,7 @@ router.delete('/products/categories/:categoryName', trackAdminActivity('category
 router.put('/products/categories/:oldCategoryName', trackAdminActivity('category_updated', (req) => `Updated category "${req.params.oldCategoryName}" to "${req.body.newCategoryName}"`), updateCategory);
 router.get('/products/inventory-stats', getInventoryStats);
 router.get('/inventory-insights', getInventoryInsights);
+router.get('/inventory-insights-debug', getInventoryInsightsDebug);
 router.post('/analytics/recalculate', recalculateAnalytics);
 router.get('/products/reviews', getProductReviews);
 router.put('/products/reviews/:id/:action', handleReviewAction);
@@ -166,9 +170,11 @@ router.get('/products/discounts/:id', validateObjectId, getDiscount);
 router.post('/products/discounts', trackAdminActivity('discount_created', (req) => `Created discount "${req.body.name}"`), createDiscount);
 router.put('/products/discounts/:id', validateObjectId, trackAdminActivity('discount_updated', (req) => `Updated discount "${req.params.id}"`), updateDiscount);
 router.delete('/products/discounts/:id', validateObjectId, trackAdminActivity('discount_deleted', (req) => `Deleted discount "${req.params.id}"`), deleteDiscount);
+router.get('/products/upcoming-discounts', getUpcomingDiscounts);
 router.get('/products/:id/available-discounts', validateObjectId, getAvailableDiscountsForProduct);
 router.put('/products/:id/discount', validateObjectId, trackAdminActivity('product_updated', (req) => `Applied discount to product "${req.params.id}"`), applyDiscountToProduct);
-router.delete('/products/:id/discount', validateObjectId, trackAdminActivity('product_updated', (req) => `Removed discount from product "${req.params.id}"`), removeDiscountFromProduct);
+router.delete('/products/:id/discount/:discountId', validateObjectId, trackAdminActivity('product_updated', (req) => `Removed discount from product "${req.params.id}"`), removeDiscountFromProduct);
+router.post('/discounts/:id/apply-to-category', validateObjectId, trackAdminActivity('discount_applied', (req) => `Applied discount "${req.params.id}" to category`), applyDiscountToCategory);
 
 router.get('/products/:id', validateObjectId, getProduct);
 router.post('/products', trackAdminActivity('product_created', (req) => `Created product "${req.body.name}"`), createProduct);

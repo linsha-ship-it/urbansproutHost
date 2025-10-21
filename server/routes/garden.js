@@ -8,10 +8,10 @@ const {
   updatePlantStatus, 
   removePlantFromGarden 
 } = require('../controllers/gardenController');
-const authenticateToken = require('../middleware/auth');
+const { protect } = require('../middlewares/auth');
 
 // Apply authentication middleware to all routes
-router.use(authenticateToken);
+router.use(protect);
 
 // POST /api/garden/add - Add plant to user's garden
 router.post('/add', addPlantToGarden);

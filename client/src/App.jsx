@@ -6,7 +6,7 @@ import Navbar from './components/layout/Navbar'
 // Import page components
 import Home from './pages/Home'
 import UrbanSproutLanding from './UrbanSproutLanding'
-import Login from './pages/auth/Login'
+import Login from './pages/auth/NewLogin'
 import Signup from './pages/auth/Signup'
 import AdminRegister from './pages/auth/AdminRegister'
 import ResetPassword from './pages/auth/ResetPassword'
@@ -15,6 +15,7 @@ import Unauthorized from './pages/Unauthorized'
 import Admin from './pages/Admin'
 import Blog from './pages/Blog'
 import Store from './pages/Store'
+import ProductDetail from './pages/ProductDetail'
 import Profile from './pages/Profile'
 
 // Import admin components
@@ -35,6 +36,8 @@ import VendorDashboard from './pages/dashboard/VendorDashboard'
 
 // Import My Garden Journal components
 import MyGardenJournal from './pages/MyGardenJournal'
+import MyOrders from './pages/MyOrders'
+import MyActivity from './pages/MyActivity'
 import PlantDetail from './pages/PlantDetail'
 import NotificationDebug from './pages/NotificationDebug'
 
@@ -112,18 +115,11 @@ const App = () => {
           {/* Public Routes */}
           <Route path="/" element={<UrbanSproutLanding />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={
-            <>
-              <Navbar />
-              <div className="pt-16">
-                <Signup />
-              </div>
-            </>
-          } />
+          <Route path="/signup" element={<Signup />} />
           <Route path="/admin-register" element={
             <>
               <Navbar />
-              <div className="pt-16">
+              <div className="pt-[82px]">
                 <AdminRegister />
               </div>
             </>
@@ -131,7 +127,7 @@ const App = () => {
           <Route path="/reset-password/:token" element={
             <>
               <Navbar />
-              <div className="pt-16">
+              <div className="pt-[82px]">
                 <ResetPassword />
               </div>
             </>
@@ -139,7 +135,7 @@ const App = () => {
           <Route path="/blog" element={
             <>
               <Navbar />
-              <div className="pt-16">
+              <div className="pt-[82px]">
                 <Blog />
               </div>
             </>
@@ -147,7 +143,7 @@ const App = () => {
           <Route path="/community" element={
             <>
               <Navbar />
-              <div className="pt-16">
+              <div className="pt-[82px]">
                 <Blog />
               </div>
             </>
@@ -155,15 +151,23 @@ const App = () => {
           <Route path="/store" element={
             <>
               <Navbar />
-              <div className="pt-16">
+              <div className="pt-[82px]">
                 <Store />
+              </div>
+            </>
+          } />
+          <Route path="/product/:id" element={
+            <>
+              <Navbar />
+              <div className="pt-[82px]">
+                <ProductDetail />
               </div>
             </>
           } />
           <Route path="/plant-suggestion" element={
             <>
               <Navbar />
-              <div className="pt-16">
+              <div className="pt-[82px]">
                 <PlantSuggestion />
               </div>
             </>
@@ -171,7 +175,7 @@ const App = () => {
           <Route path="/unauthorized" element={
             <>
               <Navbar />
-              <div className="pt-16">
+              <div className="pt-[82px]">
                 <Unauthorized />
               </div>
             </>
@@ -181,7 +185,7 @@ const App = () => {
           <Route path="/profile" element={
             <ProtectedRoute>
               <Navbar />
-              <div className="pt-16">
+              <div className="pt-[82px]">
                 <Profile />
               </div>
             </ProtectedRoute>
@@ -189,7 +193,7 @@ const App = () => {
           <Route path="/notification-debug" element={
             <ProtectedRoute>
               <Navbar />
-              <div className="pt-16">
+              <div className="pt-[82px]">
                 <NotificationDebug />
               </div>
             </ProtectedRoute>
@@ -197,7 +201,7 @@ const App = () => {
           <Route path="/dashboard" element={
             <ProtectedRoute>
               <Navbar />
-              <div className="pt-16">
+              <div className="pt-[82px]">
                 <Dashboard />
               </div>
             </ProtectedRoute>
@@ -205,15 +209,31 @@ const App = () => {
           <Route path="/my-garden-journal" element={
             <ProtectedRoute>
               <Navbar />
-              <div className="pt-16">
+              <div className="pt-[82px]">
                 <MyGardenJournal />
+              </div>
+            </ProtectedRoute>
+          } />
+          <Route path="/my-orders" element={
+            <ProtectedRoute>
+              <Navbar />
+              <div className="pt-[82px]">
+                <MyOrders />
+              </div>
+            </ProtectedRoute>
+          } />
+          <Route path="/my-activity" element={
+            <ProtectedRoute>
+              <Navbar />
+              <div className="pt-[82px]">
+                <MyActivity />
               </div>
             </ProtectedRoute>
           } />
           <Route path="/plant-detail/:plantId" element={
             <ProtectedRoute>
               <Navbar />
-              <div className="pt-16">
+              <div className="pt-[82px]">
                 <PlantDetail />
               </div>
             </ProtectedRoute>
@@ -223,7 +243,7 @@ const App = () => {
           <Route path="/admin" element={
             <ProtectedRoute requiredRole="admin">
               <Navbar />
-              <div className="pt-16">
+              <div className="pt-[82px]">
                 <AdminDashboard />
               </div>
             </ProtectedRoute>

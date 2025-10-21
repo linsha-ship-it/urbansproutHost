@@ -39,6 +39,16 @@ export const initializeRazorpayPayment = (orderData, onSuccess, onError) => {
     order_id: orderData.razorpayOrderId
   });
 
+  // Validate customer data (make it optional with defaults)
+  if (!orderData.customerName) {
+    console.warn('Customer name not provided, using default');
+    orderData.customerName = 'Customer';
+  }
+  if (!orderData.customerEmail) {
+    console.warn('Customer email not provided, using default');
+    orderData.customerEmail = 'customer@example.com';
+  }
+
   const options = {
     key: RAZORPAY_CONFIG.key_id,
     amount: orderData.amount * 100, // Razorpay expects amount in paise
@@ -53,9 +63,9 @@ export const initializeRazorpayPayment = (orderData, onSuccess, onError) => {
       onSuccess(response)
     },
     prefill: {
-      name: orderData.customerName,
-      email: orderData.customerEmail,
-      contact: orderData.customerPhone
+      name: orderData.customerName || 'Customer',
+      email: orderData.customerEmail || 'customer@example.com',
+      contact: orderData.customerPhone || '9999999999'
     },
     notes: {
       address: orderData.shippingAddress,

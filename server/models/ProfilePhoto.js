@@ -45,3 +45,8 @@ const profilePhotoSchema = new mongoose.Schema({
 profilePhotoSchema.index({ userId: 1 });
 
 module.exports = mongoose.model('ProfilePhoto', profilePhotoSchema);
+
+
+
+
+

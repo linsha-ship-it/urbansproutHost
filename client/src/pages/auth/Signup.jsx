@@ -45,6 +45,13 @@ const Signup = () => {
     message: '',
     exists: null
   });
+  
+  // OTP Verification States
+  const [showOtpInput, setShowOtpInput] = useState(false);
+  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [otpError, setOtpError] = useState('');
+  const [resendTimer, setResendTimer] = useState(0);
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
 
   // Email validation function
   const checkEmailAvailability = useCallback(async (email) => {
@@ -61,7 +68,7 @@ const Signup = () => {
     setEmailValidation(prev => ({ ...prev, isChecking: true }));
 
     try {
-      const API_BASE_URL = 'http://localhost:5002/api';
+      const API_BASE_URL = 'http://localhost:5001/api';
       const response = await fetch(`${API_BASE_URL}/auth/check-email`, {
         method: 'POST',
         headers: {
@@ -117,6 +124,16 @@ const Signup = () => {
     return () => clearTimeout(timeoutId);
   }, [formData.email, checkEmailAvailability]);
 
+  // OTP Timer Effect
+  useEffect(() => {
+    if (resendTimer > 0) {
+      const interval = setInterval(() => {
+        setResendTimer(prev => prev - 1);
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [resendTimer]);
+
 
 
   const handleInputChange = (e) => {
@@ -144,19 +161,132 @@ const Signup = () => {
     setError('');
     
     try {
-      const userData = {
-        ...formData,
-        role: 'beginner'
-      };
-      
-      const response = await authAPI.register(userData);
-      
-      if (response.success) {
-        login(response.data.user, response.data.token);
-            navigate('/dashboard');
+      // Send OTP to email instead of registering directly
+      const API_BASE_URL = 'http://localhost:5001/api';
+      const response = await fetch(`${API_BASE_URL}/auth/send-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+          role: 'beginner'
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setShowOtpInput(true);
+        setResendTimer(60); // 60 seconds countdown
+        setError('');
+      } else {
+        setError(data.message || 'Failed to send OTP. Please try again.');
       }
     } catch (error) {
-      setError(error.message || 'Registration failed. Please try again.');
+      setError(error.message || 'Failed to send OTP. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOtpChange = (index, value) => {
+    // Only allow digits
+    if (value && !/^\d$/.test(value)) return;
+
+    const newOtp = [...otp];
+    newOtp[index] = value;
+    setOtp(newOtp);
+    setOtpError('');
+
+    // Auto-focus next input
+    if (value && index < 5) {
+      const nextInput = document.getElementById(`otp-${index + 1}`);
+      if (nextInput) nextInput.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (index, e) => {
+    // Handle backspace
+    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+      const prevInput = document.getElementById(`otp-${index - 1}`);
+      if (prevInput) prevInput.focus();
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    const otpCode = otp.join('');
+    
+    if (otpCode.length !== 6) {
+      setOtpError('Please enter the complete 6-digit OTP');
+      return;
+    }
+
+    setVerifyingOtp(true);
+    setOtpError('');
+
+    try {
+      const API_BASE_URL = 'http://localhost:5001/api';
+      const response = await fetch(`${API_BASE_URL}/auth/verify-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: formData.email,
+          otp: otpCode
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Login the user
+        login(data.data.user, data.data.token);
+        navigate('/dashboard');
+      } else {
+        setOtpError(data.message || 'Invalid OTP. Please try again.');
+        setOtp(['', '', '', '', '', '']); // Clear OTP inputs
+        document.getElementById('otp-0')?.focus();
+      }
+    } catch (error) {
+      setOtpError(error.message || 'Failed to verify OTP. Please try again.');
+    } finally {
+      setVerifyingOtp(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendTimer > 0) return;
+
+    setLoading(true);
+    setOtpError('');
+
+    try {
+      const API_BASE_URL = 'http://localhost:5001/api';
+      const response = await fetch(`${API_BASE_URL}/auth/resend-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: formData.email
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setResendTimer(60);
+        setOtp(['', '', '', '', '', '']);
+        document.getElementById('otp-0')?.focus();
+      } else {
+        setOtpError(data.message || 'Failed to resend OTP. Please try again.');
+      }
+    } catch (error) {
+      setOtpError(error.message || 'Failed to resend OTP. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -249,7 +379,122 @@ const Signup = () => {
           transition={{ delay: 0.5 }}
           className="bg-white/80 backdrop-blur-sm p-8 rounded-2xl shadow-xl border border-white/20"
         >
-          <form className="space-y-6" onSubmit={handleSubmit}>
+          {showOtpInput ? (
+            // OTP Verification Screen
+            <div className="space-y-6">
+              <div className="text-center">
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="mx-auto w-16 h-16 bg-forest-green-100 rounded-full flex items-center justify-center mb-4"
+                >
+                  <Mail className="h-8 w-8 text-forest-green-600" />
+                </motion.div>
+                <h2 className="text-2xl font-bold text-forest-green-800 mb-2">Verify Your Email</h2>
+                <p className="text-sm text-forest-green-600">
+                  We've sent a 6-digit code to<br />
+                  <span className="font-semibold">{formData.email}</span>
+                </p>
+              </div>
+
+              {/* OTP Error Message */}
+              <AnimatePresence>
+                {otpError && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center"
+                  >
+                    <AlertCircle className="h-5 w-5 mr-2" />
+                    {otpError}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* OTP Input */}
+              <div>
+                <label className="block text-sm font-medium text-forest-green-700 mb-3 text-center">
+                  Enter Verification Code
+                </label>
+                <div className="flex justify-center gap-2">
+                  {otp.map((digit, index) => (
+                    <input
+                      key={index}
+                      id={`otp-${index}`}
+                      type="text"
+                      maxLength={1}
+                      value={digit}
+                      onChange={(e) => handleOtpChange(index, e.target.value)}
+                      onKeyDown={(e) => handleOtpKeyDown(index, e)}
+                      className="w-12 h-14 text-center text-2xl font-bold border-2 border-forest-green-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-forest-green-500 focus:border-transparent transition-all"
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Verify Button */}
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                type="button"
+                onClick={handleVerifyOtp}
+                disabled={verifyingOtp || otp.join('').length !== 6}
+                className="w-full flex justify-center items-center py-3 px-4 border border-transparent text-sm font-medium rounded-xl text-cream-100 bg-gradient-to-r from-forest-green-600 to-forest-green-700 hover:from-forest-green-700 hover:to-forest-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-forest-green-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
+              >
+                {verifyingOtp ? (
+                  <div className="flex items-center">
+                    <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                    Verifying...
+                  </div>
+                ) : (
+                  <>
+                    <CheckCircle className="h-5 w-5 mr-2" />
+                    Verify Email
+                  </>
+                )}
+              </motion.button>
+
+              {/* Resend OTP */}
+              <div className="text-center">
+                <p className="text-sm text-forest-green-600 mb-2">
+                  Didn't receive the code?
+                </p>
+                {resendTimer > 0 ? (
+                  <p className="text-sm text-forest-green-500 font-medium">
+                    Resend code in {resendTimer}s
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    disabled={loading}
+                    className="text-sm font-medium text-forest-green-600 hover:text-forest-green-500 underline disabled:opacity-50"
+                  >
+                    Resend Code
+                  </button>
+                )}
+              </div>
+
+              {/* Back to Signup */}
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowOtpInput(false);
+                    setOtp(['', '', '', '', '', '']);
+                    setOtpError('');
+                    setResendTimer(0);
+                  }}
+                  className="text-sm text-forest-green-600 hover:text-forest-green-500 transition-colors"
+                >
+                  ← Back to Signup
+                </button>
+              </div>
+            </div>
+          ) : (
+            // Signup Form
+            <form className="space-y-6" onSubmit={handleSubmit}>
             {/* Error Message */}
             <AnimatePresence>
           {error && (
@@ -550,6 +795,7 @@ const Signup = () => {
             </p>
           </div>
         </form>
+          )}
         </motion.div>
 
         {/* Features highlight */}

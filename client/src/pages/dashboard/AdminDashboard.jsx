@@ -18,7 +18,7 @@ const AdminDashboard = () => {
     loadDashboardData();
     
     // Connect to Socket.IO for real-time updates
-    const socket = io('http://localhost:5002', {
+    const socket = io('http://localhost:5001', {
       auth: {
         token: localStorage.getItem('token')
       }
@@ -130,9 +130,9 @@ const AdminDashboard = () => {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
         {/* Welcome Section */}
-        <div className="bg-gradient-to-r from-red-500 to-pink-600 rounded-lg p-6 text-white mb-8">
+        <div className="bg-gradient-to-r from-amber-800 to-yellow-900 rounded-lg p-6 text-white mb-8">
           <h2 className="text-2xl font-bold mb-2">Admin Dashboard 👑</h2>
-          <p className="text-red-100">
+          <p className="text-amber-50">
             Manage the UrbanSprout platform and monitor system performance.
           </p>
         </div>

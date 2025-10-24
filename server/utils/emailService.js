@@ -1463,6 +1463,129 @@ const sendAdminVerificationEmail = async (email, userName, verificationType, det
   }
 };
 
+// Send OTP verification email
+const sendOTPEmail = async (email, otp, userName = 'User') => {
+  try {
+    const transporter = await createTransporter();
+    
+    // If transporter is null, it means we're in simulation mode
+    if (!transporter) {
+      console.log('📧 Email simulation mode - OTP email would be sent to:', email);
+      console.log('📧 OTP Code:', otp);
+      return { success: true, messageId: 'simulated-' + Date.now() };
+    }
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: linear-gradient(135deg, #10B981, #059669); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+          .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+          .otp-box { background: #E0F2FE; border: 2px solid #0369A1; padding: 20px; border-radius: 10px; text-align: center; margin: 30px 0; }
+          .otp-code { font-size: 36px; font-weight: bold; color: #0369A1; letter-spacing: 8px; font-family: 'Courier New', monospace; }
+          .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+          .warning { background: #FEF3C7; border: 1px solid #F59E0B; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>🌱 UrbanSprout</h1>
+            <h2>Email Verification</h2>
+          </div>
+          
+          <div class="content">
+            <h3>Hello ${userName}!</h3>
+            
+            <p>Thank you for signing up with UrbanSprout! To complete your registration, please verify your email address using the OTP code below:</p>
+            
+            <div class="otp-box">
+              <p style="margin: 0; color: #666; font-size: 14px;">Your Verification Code</p>
+              <div class="otp-code">${otp}</div>
+              <p style="margin: 10px 0 0 0; color: #666; font-size: 12px;">Valid for 10 minutes</p>
+            </div>
+            
+            <div class="warning">
+              <strong>⚠️ Security Notice:</strong>
+              <ul style="margin: 10px 0 0 0; padding-left: 20px;">
+                <li>This code will expire in 10 minutes</li>
+                <li>Never share this code with anyone</li>
+                <li>If you didn't request this code, please ignore this email</li>
+              </ul>
+            </div>
+            
+            <p>Enter this code on the signup page to verify your email and complete your registration.</p>
+            
+            <p>If you didn't create an account with UrbanSprout, you can safely ignore this email.</p>
+            
+            <p>Welcome to the UrbanSprout community!<br>
+            The UrbanSprout Team 🌿</p>
+          </div>
+          
+          <div class="footer">
+            <p>This email was sent from UrbanSprout - Urban Gardening Made Easy</p>
+            <p>© 2025 UrbanSprout. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const mailOptions = {
+      from: `"UrbanSprout" <${process.env.EMAIL_USER || 'noreply@urbansprout.com'}>`,
+      to: email,
+      subject: '🔐 Your UrbanSprout Verification Code',
+      html: htmlContent,
+      text: `
+        Hello ${userName}!
+        
+        Thank you for signing up with UrbanSprout! 
+        
+        Your verification code is: ${otp}
+        
+        This code will expire in 10 minutes.
+        
+        Enter this code on the signup page to verify your email and complete your registration.
+        
+        Security Notice:
+        - Never share this code with anyone
+        - If you didn't request this code, please ignore this email
+        
+        Welcome to the UrbanSprout community!
+        The UrbanSprout Team
+      `
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log('OTP email sent:', info.messageId);
+    
+    return {
+      success: true,
+      messageId: info.messageId
+    };
+
+  } catch (error) {
+    console.error('Error sending OTP email:', error);
+    
+    // Provide specific error messages for common issues
+    let errorMessage = error.message;
+    if (error.code === 'EAUTH') {
+      errorMessage = 'Gmail authentication failed. Please check your EMAIL_USER and EMAIL_PASS in .env file.';
+    } else if (error.code === 'ECONNECTION') {
+      errorMessage = 'Connection to Gmail failed. Please check your internet connection.';
+    }
+    
+    return {
+      success: false,
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? error : undefined
+    };
+  }
+};
+
 module.exports = {
   sendPasswordResetEmail,
   sendWelcomeEmail,
@@ -1473,5 +1596,6 @@ module.exports = {
   sendPaymentConfirmationEmail,
   sendOrderStatusUpdateEmail,
   sendAdminVerificationEmail,
-  sendEmailNotification
+  sendEmailNotification,
+  sendOTPEmail
 };

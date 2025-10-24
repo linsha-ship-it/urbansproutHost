@@ -6,20 +6,28 @@ const connectDB = async () => {
     if (!process.env.MONGODB_URI) {
       console.error('❌ MONGODB_URI environment variable is not set');
       console.error('Please create a .env file with your MongoDB connection string');
-      process.exit(1);
+      throw new Error('MONGODB_URI not configured');
     }
 
     console.log('🔄 Connecting to MongoDB...');
-    const conn = await mongoose.connect(process.env.MONGODB_URI);
+    
+    // Add connection options to handle timeout better
+    const conn = await mongoose.connect(process.env.MONGODB_URI, {
+      serverSelectionTimeoutMS: 10000, // Timeout after 10s instead of 30s
+      socketTimeoutMS: 45000,
+    });
 
     console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
     console.log(`📊 Database: ${conn.connection.name}`);
+    
+    return conn;
   } catch (error) {
     console.error('❌ MongoDB connection error:', error.message);
     console.error('Please check your MongoDB connection string and network connectivity');
     console.warn('⚠️  Server will continue running without database connection');
     console.warn('⚠️  Some features may not work properly');
-    // Don't exit - let the server continue running
+    // Throw error so calling code knows connection failed
+    throw error;
   }
 };
 

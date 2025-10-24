@@ -285,37 +285,6 @@ const PlantChatbot = ({ onClose, user }) => {
                                   <span>{plant.growTime}</span>
                                 </div>
                               </div>
-                              
-                              <div className="mt-2">
-                                <button
-                                  onClick={() => {
-                                    // Add to user's garden
-                                    try {
-                                      const key = `my_garden_${user?.id || user?.uid || user?.email || 'guest'}`
-                                      const existing = JSON.parse(localStorage.getItem(key) || '[]')
-                                      if (!existing.includes(plant.name)) {
-                                        const updated = [...existing, plant.name]
-                                        localStorage.setItem(key, JSON.stringify(updated))
-                                        
-                                        // Also save plant image
-                                        const imageKey = `plant_images_${user?.id || user?.uid || user?.email || 'guest'}`
-                                        const existingImages = JSON.parse(localStorage.getItem(imageKey) || '{}')
-                                        existingImages[plant.name] = plant.image || '/api/placeholder/300/200'
-                                        localStorage.setItem(imageKey, JSON.stringify(existingImages))
-                                        
-                                        alert(`Added ${plant.name} to your garden! 🌱`)
-                                      } else {
-                                        alert(`${plant.name} is already in your garden!`)
-                                      }
-                                    } catch (e) {
-                                      console.error('Failed to save to garden', e)
-                                    }
-                                  }}
-                                  className="px-3 py-1 bg-green-500 text-white text-xs rounded-full hover:bg-green-600 transition-colors"
-                                >
-                                  Add to Garden
-                                </button>
-                              </div>
                             </div>
                           </div>
                         </motion.div>

@@ -18,6 +18,10 @@ const Signup = () => {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [otpSent, setOtpSent] = useState(false)
+  const [otp, setOtp] = useState('')
+  const [otpLoading, setOtpLoading] = useState(false)
+  const [resendTimer, setResendTimer] = useState(0)
 
   const handleSubmit = async (e) => {
     e.preventDefault()

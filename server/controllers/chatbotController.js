@@ -335,6 +335,23 @@ async function getStoreRecommendations(space, maintenance) {
 
 // Removed static vegetable recommendations function - now using Mistral AI
 
+// Function to detect if user is asking for plant recommendations
+function isAskingForPlantRecommendations(message) {
+  const messageLower = message.toLowerCase();
+  
+  const plantRequestKeywords = [
+    'suggest', 'recommend', 'show me', 'what can i grow', 'what should i grow',
+    'which plant', 'what plant', 'best plant', 'good plant', 'help me grow',
+    'want to grow', 'can i grow', 'looking for', 'give me', 'tell me about',
+    'options for', 'grow in', 'beginner', 'start with', 'varieties',
+    'fruits', 'vegetables', 'herbs', 'fast-growing', 'quick-growing',
+    'container-friendly', 'small space', 'low maintenance', 'easy to grow',
+    'hybrid', 'dwarf', 'compact', 'what are', 'plant ideas'
+  ];
+  
+  return plantRequestKeywords.some(keyword => messageLower.includes(keyword));
+}
+
 // Mistral-powered conversation processing
 async function processMistralConversation(userId, message) {
   try {
@@ -358,9 +375,14 @@ async function processMistralConversation(userId, message) {
     
     updateSession(userId, 'mistral_conversation', { conversationHistory });
     
-    // Get relevant plant suggestions based on the response
-    const plantSuggestions = extractPlantSuggestions(mistralResponse);
-    const storeItems = await getStoreRecommendations('medium', 'medium');
+    // Only extract plant suggestions if user is asking for recommendations
+    let plantSuggestions = [];
+    let storeItems = [];
+    
+    if (isAskingForPlantRecommendations(message)) {
+      plantSuggestions = extractPlantSuggestions(mistralResponse);
+      storeItems = await getStoreRecommendations('medium', 'medium');
+    }
     
     return {
       message: mistralResponse,
@@ -445,19 +467,17 @@ const processMessage = asyncHandler(async (req, res) => {
     });
   }
 
-  // Check if Mistral API is available
-  if (process.env.MISTRAL_API_KEY) {
-    try {
-      // Use Mistral-powered conversation processing
-      const response = await processMistralConversation(userId || 'anonymous', message);
-      return res.json({
-        success: true,
-        data: response
-      });
-    } catch (error) {
-      console.error('Mistral processing failed, falling back to traditional processing:', error);
-      // Fall through to traditional processing
-    }
+  // Always try Mistral-powered conversation processing first (includes intelligent fallback)
+  try {
+    // Use Mistral-powered conversation processing (with intelligent fallback if no API key)
+    const response = await processMistralConversation(userId || 'anonymous', message);
+    return res.json({
+      success: true,
+      data: response
+    });
+  } catch (error) {
+    console.error('Mistral processing failed, falling back to traditional processing:', error);
+    // Fall through to traditional processing
   }
 
   // Fallback to traditional conversation processing

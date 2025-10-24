@@ -1,9 +1,0 @@
-name,category,description,sku,regularPrice,discountPrice,stock,lowStockThreshold,featured,published,tags,weight,length,width,height,image1,image2,image3
-Premium Garden Trowel,Tools,High-quality stainless steel garden trowel for professional gardening,TOOL-001,299.99,249.99,50,10,true,true,gardening,tools,stainless steel,0.5,25,8,5,https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400,https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400,https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400
-Organic Potting Soil,Soil,Premium organic potting soil for healthy plant growth,SOIL-001,199.99,,100,20,false,true,organic,soil,potting,2.0,30,20,15,https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400,https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400,
-Watering Can,Accessories,Plastic watering can with fine rose for gentle watering,WATER-001,149.99,129.99,75,15,false,true,watering,accessories,plastic,0.8,20,15,25,https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400,,https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400
-Seed Starter Kit,Seeds,Complete seed starting kit with trays and domes,SEED-001,399.99,,25,5,true,true,seeds,starter,kit,1.2,40,30,10,https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400,https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400,https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400
-
-
-
-

@@ -219,7 +219,7 @@ const Navbar = () => {
                         <div className="relative">
                           <div className="absolute inset-0 bg-gradient-to-br from-forest-green-400 to-forest-green-600 rounded-full blur-sm opacity-60 group-hover:opacity-80 transition-opacity duration-300"></div>
                           <img
-                            src={user.avatar.startsWith('/api/profile-photo/') ? `http://localhost:5002${user.avatar}` : user.avatar}
+                            src={user.avatar.startsWith('/api/profile-photo/') ? `http://localhost:5001${user.avatar}` : user.avatar}
                             alt={user.name}
                             className="relative w-10 h-10 rounded-full border-2 border-white/50 shadow-lg object-cover"
                           />
@@ -467,7 +467,7 @@ const Navbar = () => {
                         <div className="flex items-center space-x-3">
                           {user.avatar ? (
                             <img
-                              src={user.avatar.startsWith('/api/profile-photo/') ? `http://localhost:5002${user.avatar}` : user.avatar}
+                              src={user.avatar.startsWith('/api/profile-photo/') ? `http://localhost:5001${user.avatar}` : user.avatar}
                               alt={user.name}
                               className="w-10 h-10 rounded-full border-2 border-white/50 shadow-lg object-cover"
                             />

@@ -10,7 +10,10 @@ const {
   logout,
   deleteAccount,
   forgotPassword,
-  resetPassword
+  resetPassword,
+  sendOTP,
+  verifyOTP,
+  resendOTP
 } = require('../controllers/authController');
 const { protect } = require('../middlewares/auth');
 const admin = require('firebase-admin');
@@ -59,6 +62,11 @@ router.post('/login', validateLogin, login);
 router.post('/google', googleSignIn);
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
+
+// OTP verification routes
+router.post('/send-otp', sendOTP);
+router.post('/verify-otp', verifyOTP);
+router.post('/resend-otp', resendOTP);
 
 // Email validation endpoint
 router.post('/check-email', async (req, res) => {

@@ -1,5 +1,6 @@
 const Discount = require('../models/Discount');
 const Product = require('../models/Product');
+const mongoose = require('mongoose');
 
 class DiscountLifecycleService {
   constructor() {
@@ -39,6 +40,12 @@ class DiscountLifecycleService {
   // Process all discounts for lifecycle management
   async processDiscounts() {
     try {
+      // Check if database is connected
+      if (mongoose.connection.readyState !== 1) {
+        console.log('⚠️  Database not connected. Skipping discount lifecycle processing.');
+        return;
+      }
+      
       console.log('Processing discount lifecycle...');
       const now = new Date();
 
@@ -109,6 +116,8 @@ class DiscountLifecycleService {
 const discountLifecycleService = new DiscountLifecycleService();
 
 module.exports = discountLifecycleService;
+
+
 
 
 

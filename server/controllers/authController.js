@@ -1,10 +1,11 @@
 const User = require('../models/User');
 const Admin = require('../models/Admin');
 const Blog = require('../models/Blog');
+const OTP = require('../models/OTP');
 const { generateToken } = require('../middlewares/auth');
 const { AppError } = require('../middlewares/errorHandler');
 const { asyncHandler } = require('../middlewares/errorHandler');
-const { sendPasswordResetEmail, sendWelcomeEmail, sendRegistrationEmail } = require('../utils/emailService');
+const { sendPasswordResetEmail, sendWelcomeEmail, sendRegistrationEmail, sendOTPEmail } = require('../utils/emailService');
 const Cart = require('../models/Cart');
 const Wishlist = require('../models/Wishlist');
 
@@ -569,6 +570,238 @@ const resetPassword = asyncHandler(async (req, res, next) => {
   });
 });
 
+// @desc    Send OTP for email verification during signup
+// @route   POST /api/auth/send-otp
+// @access  Public
+const sendOTP = asyncHandler(async (req, res, next) => {
+  const { name, email, password, role = 'beginner' } = req.body;
+
+  // Validate required fields
+  if (!email) {
+    return next(new AppError('Email is required', 400));
+  }
+
+  if (!name) {
+    return next(new AppError('Name is required', 400));
+  }
+
+  if (!password) {
+    return next(new AppError('Password is required', 400));
+  }
+
+  // Check if user already exists
+  const existingUser = await User.findOne({ email: email.toLowerCase() });
+  if (existingUser) {
+    return next(new AppError('User with this email already exists', 400));
+  }
+
+  // Generate 6-digit OTP
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+  // Delete any existing OTP for this email
+  await OTP.deleteMany({ email: email.toLowerCase() });
+
+  // Create OTP record with user data
+  const otpRecord = await OTP.create({
+    email: email.toLowerCase(),
+    otp,
+    type: 'registration',
+    expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
+    userData: {
+      name: name.trim(),
+      password, // Will be hashed when user is created
+      role
+    }
+  });
+
+  // Send OTP email
+  try {
+    const emailResult = await sendOTPEmail(email, otp, name);
+    if (emailResult.success) {
+      console.log(`✅ OTP email sent to ${email}`);
+    } else {
+      console.log(`📧 OTP email simulation for ${email}: ${otp}`);
+    }
+  } catch (emailError) {
+    console.error('Failed to send OTP email:', emailError);
+    // Don't fail OTP generation if email fails - just log it
+  }
+
+  res.status(200).json({
+    success: true,
+    message: 'OTP sent to your email address. Please check your inbox.',
+    data: {
+      email: email.toLowerCase(),
+      expiresIn: '10 minutes'
+    }
+  });
+});
+
+// @desc    Verify OTP and complete registration
+// @route   POST /api/auth/verify-otp
+// @access  Public
+const verifyOTP = asyncHandler(async (req, res, next) => {
+  const { email, otp } = req.body;
+
+  // Validate required fields
+  if (!email || !otp) {
+    return next(new AppError('Email and OTP are required', 400));
+  }
+
+  // Find OTP record
+  const otpRecord = await OTP.findOne({ 
+    email: email.toLowerCase(),
+    type: 'registration'
+  }).sort({ createdAt: -1 }); // Get most recent OTP
+
+  if (!otpRecord) {
+    return next(new AppError('No OTP found for this email. Please request a new one.', 400));
+  }
+
+  // Check if OTP is expired
+  if (otpRecord.isExpired()) {
+    await OTP.deleteOne({ _id: otpRecord._id });
+    return next(new AppError('OTP has expired. Please request a new one.', 400));
+  }
+
+  // Check if max attempts reached
+  if (otpRecord.isMaxAttemptsReached()) {
+    await OTP.deleteOne({ _id: otpRecord._id });
+    return next(new AppError('Maximum verification attempts reached. Please request a new OTP.', 400));
+  }
+
+  // Verify OTP
+  if (otpRecord.otp !== otp.trim()) {
+    await otpRecord.incrementAttempts();
+    const attemptsLeft = otpRecord.maxAttempts - otpRecord.attempts;
+    return next(new AppError(`Invalid OTP. ${attemptsLeft} attempts remaining.`, 400));
+  }
+
+  // OTP is valid - create the user
+  const userData = {
+    name: otpRecord.userData.name,
+    email: email.toLowerCase(),
+    password: otpRecord.userData.password,
+    role: otpRecord.userData.role,
+    emailVerified: true // Mark email as verified
+  };
+
+  const user = await User.create(userData);
+
+  // Auto-create empty cart and wishlist for the user
+  try {
+    await Promise.all([
+      Cart.findOneAndUpdate(
+        { user: user._id },
+        { $setOnInsert: { user: user._id, items: [], updatedAt: new Date() } },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      ),
+      Wishlist.findOneAndUpdate(
+        { user: user._id },
+        { $setOnInsert: { user: user._id, items: [], updatedAt: new Date() } },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      )
+    ]);
+  } catch (e) {
+    console.error('Failed to initialize cart/wishlist for user:', e.message);
+  }
+
+  // Delete OTP record
+  await OTP.deleteOne({ _id: otpRecord._id });
+
+  // Generate token
+  const token = generateToken(user._id);
+
+  // Send welcome/registration email
+  try {
+    const emailResult = await sendRegistrationEmail(user.email, user.name, user.role);
+    if (emailResult.success) {
+      console.log(`✅ Registration email sent to ${user.email}`);
+    }
+  } catch (emailError) {
+    console.error('Failed to send registration email:', emailError);
+    // Don't fail registration if email fails
+  }
+
+  res.status(201).json({
+    success: true,
+    message: 'Email verified successfully! Your account has been created.',
+    data: {
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        emailVerified: user.emailVerified,
+        createdAt: user.createdAt
+      },
+      token
+    }
+  });
+});
+
+// @desc    Resend OTP
+// @route   POST /api/auth/resend-otp
+// @access  Public
+const resendOTP = asyncHandler(async (req, res, next) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return next(new AppError('Email is required', 400));
+  }
+
+  // Find existing OTP record
+  const existingOTP = await OTP.findOne({ 
+    email: email.toLowerCase(),
+    type: 'registration'
+  }).sort({ createdAt: -1 });
+
+  if (!existingOTP) {
+    return next(new AppError('No pending registration found for this email. Please start registration again.', 400));
+  }
+
+  // Check if user already exists
+  const existingUser = await User.findOne({ email: email.toLowerCase() });
+  if (existingUser) {
+    return next(new AppError('User with this email already exists', 400));
+  }
+
+  // Generate new OTP
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+  // Delete old OTP and create new one
+  await OTP.deleteMany({ email: email.toLowerCase() });
+  
+  const otpRecord = await OTP.create({
+    email: email.toLowerCase(),
+    otp,
+    type: 'registration',
+    expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
+    userData: existingOTP.userData // Keep the same user data
+  });
+
+  // Send OTP email
+  try {
+    const emailResult = await sendOTPEmail(email, otp, existingOTP.userData.name);
+    if (emailResult.success) {
+      console.log(`✅ OTP resent to ${email}`);
+    } else {
+      console.log(`📧 OTP resend simulation for ${email}: ${otp}`);
+    }
+  } catch (emailError) {
+    console.error('Failed to resend OTP email:', emailError);
+  }
+
+  res.status(200).json({
+    success: true,
+    message: 'New OTP sent to your email address.',
+    data: {
+      email: email.toLowerCase(),
+      expiresIn: '10 minutes'
+    }
+  });
+});
+
 module.exports = {
   register,
   login,
@@ -580,5 +813,8 @@ module.exports = {
   logout,
   deleteAccount,
   forgotPassword,
-  resetPassword
+  resetPassword,
+  sendOTP,
+  verifyOTP,
+  resendOTP
 };

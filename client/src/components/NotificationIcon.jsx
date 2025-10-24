@@ -34,7 +34,7 @@ const NotificationIcon = () => {
 
     // console.log('🔔 Initializing WebSocket connection for user:', user.email);
 
-    const newSocket = io('http://localhost:5002', {
+    const newSocket = io('http://localhost:5001', {
       auth: {
         token: token
       },

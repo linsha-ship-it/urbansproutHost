@@ -3,6 +3,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
 const http = require('http');
+const mongoose = require('mongoose');
 const connectDB = require('./config/database');
 const setupSocketIO = require('./utils/socketIO');
 const discountLifecycleService = require('./services/discountLifecycleService');
@@ -10,9 +11,6 @@ const discountLifecycleService = require('./services/discountLifecycleService');
 // Load env from project root first (for MONGODB_URI), then server/.env for others
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 dotenv.config({ path: path.join(__dirname, '.env') });
-
-// Connect to MongoDB
-connectDB();
 
 const app = express();
 
@@ -164,8 +162,20 @@ function startServer(port, attemptsLeft = 3) {
     console.log(`📡 Socket.IO server initialized`);
     console.log(`🌱 UrbanSprout Backend is ready!`);
     
-    // Start discount lifecycle service
-    discountLifecycleService.start();
+    // Only start discount lifecycle service if database is connected
+    if (mongoose.connection.readyState === 1) {
+      console.log('✅ Database connected - Starting discount lifecycle service');
+      discountLifecycleService.start();
+    } else {
+      console.log('⚠️  Database not connected - Discount lifecycle service will not start');
+      console.log('⚠️  Waiting for database connection...');
+      
+      // Listen for successful connection
+      mongoose.connection.once('open', () => {
+        console.log('✅ Database connected - Starting discount lifecycle service');
+        discountLifecycleService.start();
+      });
+    }
   });
 
   server.on('error', (err) => {
@@ -189,4 +199,19 @@ function startServer(port, attemptsLeft = 3) {
   });
 }
 
-startServer(DEFAULT_PORT);
+// Initialize database connection and start server
+async function initializeApp() {
+  try {
+    // Connect to database first
+    await connectDB();
+    
+    // Start server after database is connected
+    startServer(DEFAULT_PORT);
+  } catch (error) {
+    console.error('❌ Failed to initialize application:', error);
+    // Still start the server even if DB connection fails (as per original logic)
+    startServer(DEFAULT_PORT);
+  }
+}
+
+initializeApp();

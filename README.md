@@ -349,26 +349,65 @@ UrbanSprout-main/
 
 ## 🚀 Deployment
 
-### Environment Variables
-Ensure all required environment variables are set:
-- Database connection string
-- Firebase configuration
-- Email service credentials
-- Payment gateway keys
-- JWT secret key
+### ⚡ Deploy Backend to Vercel (Recommended)
 
-### Production Build
+The backend is fully configured for **Vercel** serverless deployment!
+
+#### Quick Deploy (3 Steps):
 ```bash
-# Build frontend
-cd client
-npm run build
+# 1. Install Vercel CLI
+npm install -g vercel
 
-# Start production server
+# 2. Deploy backend
 cd server
-npm start
+vercel login
+vercel
+
+# 3. Add environment variables and deploy to production
+vercel env add MONGODB_URI
+vercel env add JWT_SECRET
+vercel env add CORS_ORIGIN
+vercel --prod
 ```
 
-### Docker Deployment (Optional)
+#### 📚 Complete Deployment Guides:
+- **Quick Start**: See [`server/QUICK_START_VERCEL.md`](server/QUICK_START_VERCEL.md) - Deploy in 5 minutes
+- **Detailed Guide**: See [`server/VERCEL_DEPLOYMENT.md`](server/VERCEL_DEPLOYMENT.md) - Comprehensive instructions
+- **Checklist**: See [`server/DEPLOYMENT_CHECKLIST.md`](server/DEPLOYMENT_CHECKLIST.md) - Step-by-step checklist
+
+#### 🧪 Test Before Deploying:
+```bash
+cd server
+node test-vercel-ready.js
+```
+
+### ⚠️ Important Vercel Limitations
+
+**Features that won't work on Vercel:**
+1. **Socket.IO** (Real-time WebSocket connections)
+   - Solution: Deploy Socket.IO separately on Railway/Render
+2. **Scheduled Tasks** (discountLifecycleService)
+   - Solution: Use Vercel Cron Jobs (Pro) or external cron service
+3. **File Uploads > 4.5MB**
+   - Solution: Use Vercel Blob Storage or AWS S3
+
+### 🌐 Deploy Frontend to Vercel
+
+```bash
+cd client
+vercel
+# Follow the prompts and deploy to production
+vercel --prod
+```
+
+Update your frontend API URL after backend deployment:
+```javascript
+// In your frontend config
+const API_URL = 'https://your-backend.vercel.app/api';
+```
+
+### 🐳 Alternative: Docker Deployment
+
 ```dockerfile
 # Dockerfile example
 FROM node:18-alpine
@@ -379,6 +418,21 @@ COPY . .
 EXPOSE 5001
 CMD ["npm", "start"]
 ```
+
+### 🔧 Environment Variables for Deployment
+
+Ensure all required environment variables are set in Vercel:
+
+**Required:**
+- `MONGODB_URI` - MongoDB Atlas connection string
+- `JWT_SECRET` - Secret key for JWT tokens (min 32 characters)
+- `CORS_ORIGIN` - Your frontend URL(s), comma-separated
+
+**Optional (based on features):**
+- `SENDGRID_API_KEY` - For email service
+- `RAZORPAY_KEY_ID` & `RAZORPAY_KEY_SECRET` - For payments
+- `MISTRAL_API_KEY` - For AI chatbot
+- `FIREBASE_*` - Firebase credentials
 
 ## 🤝 Contributing
 

@@ -62,8 +62,8 @@ const InventoryInsights = () => {
         socketRef.current.disconnect();
       }
 
-      // The backend Socket.IO server is initialized on the same port as the API (default 5002)
-      const SOCKET_URL = 'http://localhost:5002';
+      // The backend Socket.IO server is initialized on the same port as the API (default 5001)
+      const SOCKET_URL = 'http://localhost:5001';
       const token = localStorage.getItem('urbansprout_token');
 
       socketRef.current = io(SOCKET_URL, {

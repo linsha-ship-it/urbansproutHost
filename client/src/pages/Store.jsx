@@ -1235,7 +1235,7 @@ const Store = () => {
                           SALE
                         </span>
                       )}
-                      {product.discountPrice && product.regularPrice && (
+                      {product.discountPrice && product.regularPrice && product.discountPrice < product.regularPrice && (
                         <span className="px-2 py-1 bg-red-500 text-white text-xs font-semibold rounded">
                           {Math.round(((product.regularPrice - product.discountPrice) / product.regularPrice) * 100)}% OFF
                         </span>
@@ -1333,7 +1333,7 @@ const Store = () => {
                         <span className="text-lg font-bold text-forest-green-800">
                           ₹{(product.currentPrice || product.discountPrice || product.regularPrice || product.price || 0).toLocaleString()}
                         </span>
-                        {(product.currentPrice || product.discountPrice) && product.regularPrice ? (
+                        {(product.currentPrice || product.discountPrice) && product.regularPrice && (product.currentPrice || product.discountPrice) < product.regularPrice ? (
                           <>
                             <span className="text-xs text-forest-green-400 line-through">
                               ₹{(product.regularPrice || 0).toLocaleString()}

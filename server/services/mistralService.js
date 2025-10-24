@@ -16,192 +16,120 @@ class MistralService {
     }
 
     try {
-      // Create the system prompt for vegetable and fruit focused chatbot
-      const systemPrompt = `You are an enthusiastic and supportive gardening assistant specialized in edible vegetables and fruits for small-scale growing. You ALWAYS encourage users and never discourage their gardening ideas. Your expertise includes:
+      // Create the system prompt - let Mistral use its own plant knowledge
+      const systemPrompt = `You are an enthusiastic and expert gardening assistant specialized in helping users grow edible vegetables, fruits, and herbs. You have comprehensive knowledge about all types of plants, fruits, and vegetables.
 
-EDIBLE VEGETABLES AND FRUITS ONLY:
-- Leafy greens (lettuce, spinach, kale, arugula, Swiss chard)
-- Root vegetables (carrots, radishes, beets, turnips)
-- Fruiting vegetables (tomatoes, peppers, cucumbers, zucchini, eggplant)
-- Legumes (beans, peas)
-- Alliums (onions, garlic, leeks, green onions)
-- Cruciferous vegetables (broccoli, cauliflower, cabbage, Brussels sprouts)
-- Squash and pumpkins
-- Edible fruits (strawberries, blueberries, raspberries, apples, citrus, etc.)
+CRITICAL: Always provide COMPLETE responses. Never end a response mid-sentence or with incomplete information. If you start listing items or varieties, finish the entire list. Ensure every response has a proper conclusion.
 
-HYBRID AND CONTAINER VARIETIES EXPERTISE:
-- Dwarf and compact hybrid fruit trees (dwarf apple, citrus, cherry trees)
-- Container-friendly hybrid vegetables (patio tomatoes, bush beans, compact peppers)
-- Fast-growing hybrid varieties that produce quickly
-- Space-saving vertical growing techniques
-- Grafted plants that combine multiple varieties
-- Self-pollinating hybrid fruits perfect for small spaces
-- Determinate vs indeterminate varieties for containers
+IMPORTANT GUIDELINES:
+- Provide detailed, specific information about any plant the user asks about
+- Include information about:
+  * Plant description and benefits
+  * Sunlight requirements (full sun, partial sun, shade)
+  * Space requirements (small containers, medium pots, large spaces)
+  * Maintenance level (low, medium, high)
+  * Growing time and harvest timeline
+  * Watering needs
+  * Soil requirements
+  * Growing tips and best practices
+  * Container growing advice when relevant
+  * Common varieties that work well for home growing
 
-IMPORTANT APPROACH:
-- NEVER discourage or degrade user ideas - always be positive and supportive
-- Focus ONLY on plants that produce edible vegetables or fruits
-- Emphasize container growing and small-space solutions
-- Always provide practical requirements rather than discouraging words
-- Highlight hybrid varieties that grow faster and more compactly
+- MAINTAIN CONVERSATION CONTEXT - if the user asks follow-up questions like "How much water does it need?", "What size pot?", "How long until fruit?", refer to the plant discussed in previous messages
+- Be specific and detailed in your responses
+- Always encourage users and be positive about their gardening goals
+- Focus on practical, actionable advice for home gardeners
+- When discussing fruits and vegetables, emphasize container-friendly and small-space growing options
+- Provide variety recommendations when relevant
 
-RESPONSE GUIDELINES:
-- Always start with encouragement and positivity
-- Provide specific growing requirements (space, sunlight, water, soil)
-- Mention container sizes needed for successful growing
-- Suggest hybrid varieties that are perfect for small spaces
-- Include care level, harvest timing, and expected yields
-- Offer alternatives if space is limited (suggest compact/dwarf varieties)
-- Be enthusiastic about the user's growing ambitions
+Your goal is to help users successfully grow their own food and herbs, whether they have a large garden or just a balcony. Be encouraging, informative, and practical.`;
 
-FORMATTING RULES - VERY IMPORTANT:
-- ABSOLUTELY NEVER use any asterisks (*) or stars in your responses
-- NEVER use markdown symbols like ####, **, ##, ***, or any * symbols
-- DO NOT use hashtags (#) for formatting
-- Instead of **bold text**, just write the text normally or use CAPITAL LETTERS for emphasis
-- Instead of *italic text*, just write the text normally
-- Use clear paragraph breaks and natural language structure
-- Use simple text formatting with line breaks for organization
-- Write in a conversational, easy-to-read format
-- Use bullet points with simple dashes (-) if needed
-- Structure information with clear sentences and paragraphs
-- If you need to emphasize something, use CAPITAL LETTERS or write it in a separate line
-
-NEVER say things like "that's difficult", "you can't", "it won't work", or "that's too hard". Instead, provide the requirements and suggest the best varieties for their situation.
-
-If asked about non-edible plants, herbs, or ornamental plants, enthusiastically redirect to edible vegetables and fruits that would work great in their space.`;
-
-      // Build the conversation messages
+      // Build conversation messages
       const messages = [
-        {
-          role: 'system',
-          content: systemPrompt
-        },
-        ...conversationHistory,
-        {
-          role: 'user',
-          content: message
-        }
+        { role: 'system', content: systemPrompt }
       ];
 
-      const response = await axios.post(`${this.baseURL}/chat/completions`, {
-        model: 'mistral-small-latest',
-        messages: messages,
-        temperature: 0.7,
-        max_tokens: 500,
-        top_p: 0.9
-      }, {
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json'
-        }
+      // Add conversation history
+      conversationHistory.forEach(msg => {
+        messages.push(msg);
       });
+
+      // Add current user message
+      messages.push({ role: 'user', content: message });
+
+      // Make API call to Mistral
+      const response = await axios.post(
+        `${this.baseURL}/chat/completions`,
+        {
+          model: 'mistral-small-latest',
+          messages: messages,
+          temperature: 0.7,
+          max_tokens: 2000  // Increased to allow complete responses
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
 
       return response.data.choices[0].message.content;
     } catch (error) {
       console.error('Mistral API Error:', error.response?.data || error.message);
-      throw new Error('Failed to generate response from Mistral API');
+      
+      // If API fails, throw error so chatbot controller can handle it
+      throw new Error('Failed to generate response from Mistral API: ' + (error.response?.data?.message || error.message));
     }
   }
 
-  // Helper method to validate if the response is about edible plants
+  // Validate response quality
   validateResponse(response) {
-    const edibleKeywords = [
-      'vegetable', 'fruit', 'tomato', 'lettuce', 'spinach', 'carrot', 'radish',
-      'pepper', 'cucumber', 'zucchini', 'broccoli', 'cauliflower', 'cabbage',
-      'bean', 'pea', 'onion', 'garlic', 'strawberry', 'blueberry', 'raspberry',
-      'apple', 'citrus', 'squash', 'pumpkin', 'kale', 'arugula', 'chard',
-      'beet', 'turnip', 'eggplant', 'leek', 'brussels sprout',
-      // Hybrid and container growing terms
-      'hybrid', 'dwarf', 'compact', 'container', 'patio', 'bush', 'determinate',
-      'indeterminate', 'grafted', 'self-pollinating', 'vertical', 'space-saving',
-      'fast-growing', 'quick-growing', 'miniature', 'small-space', 'balcony'
-    ];
+    if (!response || response.trim().length < 20) {
+      return false;
+    }
 
-    const herbKeywords = [
-      'herb', 'basil', 'parsley', 'cilantro', 'mint', 'oregano', 'thyme',
-      'rosemary', 'sage', 'dill', 'chives', 'tarragon', 'bay leaf'
+    // Check if response is meaningful
+    const meaninglessResponses = [
+      'i don\'t know',
+      'i cannot help',
+      'i\'m not sure',
+      'please contact',
+      'as an ai'
     ];
 
     const responseLower = response.toLowerCase();
-    
-    // Check if response contains herb keywords
-    const hasHerbs = herbKeywords.some(keyword => responseLower.includes(keyword));
-    
-    // Check if response contains edible plant keywords
-    const hasEdiblePlants = edibleKeywords.some(keyword => responseLower.includes(keyword));
-
-    // If response mentions herbs but no edible plants, it's not appropriate
-    if (hasHerbs && !hasEdiblePlants) {
+    if (meaninglessResponses.some(phrase => responseLower.includes(phrase))) {
       return false;
     }
 
     return true;
   }
 
-  // Clean up markdown formatting from response
-  cleanMarkdownFormatting(text) {
-    if (!text) return text;
-    
-    let cleanText = text;
-    
-    // Remove markdown headers (####, ###, ##, #)
-    cleanText = cleanText.replace(/#{1,6}\s*/g, '');
-    
-    // Remove ALL asterisk patterns - be very aggressive
-    cleanText = cleanText.replace(/\*{1,4}([^*\n]+?)\*{1,4}/g, '$1'); // Remove **text**, ***text***, ****text****
-    cleanText = cleanText.replace(/\*([^*\n]+?)\*/g, '$1'); // Remove single *text*
-    cleanText = cleanText.replace(/\*{2,}/g, ''); // Remove any remaining multiple asterisks
-    cleanText = cleanText.replace(/\*/g, ''); // Remove any remaining single asterisks
-    
-    // Remove other markdown symbols
-    cleanText = cleanText.replace(/`([^`]+)`/g, '$1'); // Remove code backticks
-    cleanText = cleanText.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1'); // Remove links, keep text
-    cleanText = cleanText.replace(/_{1,2}([^_]+)_{1,2}/g, '$1'); // Remove underscores for emphasis
-    
-    // Clean up multiple line breaks
-    cleanText = cleanText.replace(/\n{3,}/g, '\n\n');
-    
-    // Ensure proper spacing after periods
-    cleanText = cleanText.replace(/\.([A-Z])/g, '. $1');
-    
-    // Remove plant emojis that might appear in responses
-    cleanText = cleanText.replace(/🌱/g, ''); // Remove seedling emoji
-    cleanText = cleanText.replace(/🌿/g, ''); // Remove herb emoji
-    cleanText = cleanText.replace(/🍅/g, ''); // Remove tomato emoji
-    cleanText = cleanText.replace(/🥬/g, ''); // Remove leafy greens emoji
-    cleanText = cleanText.replace(/🥕/g, ''); // Remove carrot emoji
-    
-    // Clean up any remaining formatting artifacts
-    cleanText = cleanText.replace(/\s+/g, ' '); // Multiple spaces to single space
-    cleanText = cleanText.replace(/\n\s+/g, '\n'); // Remove spaces at start of lines
-    
-    return cleanText.trim();
-  }
-
-  // Method to get filtered response that only discusses edible vegetables and fruits
+  // Method to get response with validation
   async getFilteredResponse(message, conversationHistory = []) {
+    // If no API key is configured, inform the user
+    if (!this.apiKey) {
+      return "I'm sorry, the AI chat service is currently not configured. Please ask the administrator to set up the MISTRAL_API_KEY environment variable to enable the plant growing assistant.";
+    }
+
     try {
       const response = await this.generateResponse(message, conversationHistory);
       
       // Validate the response
       if (!this.validateResponse(response)) {
-        // If response is not appropriate, generate a redirecting response
-        return "That's a great question! I'm Sprouty, and I specialize in helping you grow amazing edible vegetables and fruits in small spaces! I can help you with container-friendly plants like dwarf tomatoes, compact peppers, leafy greens, strawberries, and even dwarf fruit trees that grow perfectly in pots. I know all about hybrid varieties that grow fast and don't need much space. What delicious plants would you like to grow together?";
+        throw new Error('Response validation failed');
       }
 
-      // Clean up any markdown formatting
-      const cleanResponse = this.cleanMarkdownFormatting(response);
-      
-      return cleanResponse;
+      return response;
     } catch (error) {
       console.error('Error getting filtered response:', error);
-      throw error;
+      
+      // Return a helpful error message
+      return "I'm having trouble connecting to the AI service right now. Please try asking your question again in a moment. If the problem persists, please contact support.";
     }
   }
 }
 
 module.exports = new MistralService();
-
-
 
